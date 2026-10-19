@@ -1,0 +1,83 @@
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FAFAFA"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="56dp">
+
+    <!-- 顶部栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <!-- 返回 -->
+        <TextView
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:text="‹"
+            android:textColor="#222222"
+            android:textSize="40sp"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- 占满中间空间 -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- 更多 -->
+        <TextView
+            android:id="@+id/btnMore"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:text="⋮"
+            android:textColor="#222222"
+            android:textSize="28sp"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </LinearLayout>
+
+    <!-- 标题 -->
+    <EditText
+        android:id="@+id/etTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:background="@android:color/transparent"
+        android:hint="标题"
+        android:textColor="#202124"
+        android:textColorHint="#AAAAAA"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:inputType="textCapSentences"
+        android:padding="0dp" />
+
+    <!-- 正文 -->
+    <EditText
+        android:id="@+id/etContent"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="20dp"
+        android:background="@android:color/transparent"
+        android:gravity="top"
+        android:hint="开始记录你的想法..."
+        android:textColor="#333333"
+        android:textColorHint="#AAAAAA"
+        android:textSize="18sp"
+        android:lineSpacingExtra="4dp"
+        android:inputType="textMultiLine"
+        android:padding="0dp" />
+
+</LinearLayout>
