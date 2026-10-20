@@ -34,7 +34,11 @@ public class MainActivity extends AppCompatActivity {
 
     private FolderAdapter folderAdapter;
     private RecyclerView folderRecyclerView;
-    private TokenRingView tokenRingView;
+    private TextView aiBalanceProvider;
+    private TextView aiBalanceAmount;
+    private TextView aiLastUsage;
+    private AlertDialog aiUsageDialog;
+    private int balanceRequestSequence = 0;
 
     private NoteAdapter noteAdapter;
     private AppDatabase db;
@@ -58,7 +62,7 @@ public class MainActivity extends AppCompatActivity {
         drawerLayout = findViewById(R.id.drawerLayout);
         navigationDrawer = findViewById(R.id.navigationDrawer);
 
-        tokenRingView = findViewById(R.id.tokenRingView);
+        findViewById(R.id.tokenRingView).setOnClickListener(v -> showAiUsageDialog());
 
         navigationDrawer.post(() -> {
             int screenWidth =
@@ -329,11 +333,7 @@ public class MainActivity extends AppCompatActivity {
                     startActivity(intent);
                 });
 
-        if (tokenRingView != null) {
-            tokenRingView.setOnClickListener(v ->
-                    showTokenUsageDialog()
-            );
-        }
+
     }
 
     @Override
@@ -1342,9 +1342,7 @@ public class MainActivity extends AppCompatActivity {
      * invalidate() 就会让它立即刷新。
      */
     private void updateTokenRing() {
-        if (tokenRingView != null) {
-            tokenRingView.invalidate();
-        }
+        // The circle is an entry point, not a fabricated 100% token quota.
     }
 
     /**
@@ -1353,6 +1351,109 @@ public class MainActivity extends AppCompatActivity {
      * AIClient 使用 token_stats 保存统计数据。
      * 这里同时兼容 int / long 两种保存方式。
      */
+    private void showAiUsageDialog() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(22), dp(18), dp(22), dp(10));
+
+        TextView title = new TextView(this);
+        title.setText("AI 余额与 Token 消耗");
+        title.setTextSize(21);
+        title.setTextColor(Color.rgb(32, 33, 36));
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        root.addView(title);
+
+        aiBalanceProvider = createTokenInfoText("AI 账户余额");
+        aiBalanceProvider.setPadding(0, dp(18), 0, dp(6));
+        root.addView(aiBalanceProvider);
+
+        aiBalanceAmount = new TextView(this);
+        aiBalanceAmount.setText("正在查询余额…");
+        aiBalanceAmount.setTextSize(19);
+        aiBalanceAmount.setTextColor(Color.rgb(32, 33, 36));
+        aiBalanceAmount.setTypeface(null, android.graphics.Typeface.BOLD);
+        root.addView(aiBalanceAmount);
+
+        TextView refresh = createTokenInfoText("⟳  刷新余额");
+        refresh.setTextColor(Color.rgb(130, 105, 28));
+        refresh.setPadding(0, dp(12), 0, dp(12));
+        refresh.setClickable(true);
+        refresh.setOnClickListener(v -> refreshAiBalance());
+        root.addView(refresh);
+        root.addView(createTokenDivider());
+
+        TextView lastLabel = createTokenInfoText("最近一次 AI 请求");
+        lastLabel.setPadding(0, dp(14), 0, dp(6));
+        root.addView(lastLabel);
+        aiLastUsage = createTokenInfoText("暂无记录");
+        root.addView(aiLastUsage);
+
+        TextView tip = createTokenInfoText("余额来自服务商接口；Token 用量仅统计 MINENOTE 内的请求。余额不等于固定 Token 配额。");
+        tip.setPadding(0, dp(18), 0, dp(4));
+        root.addView(tip);
+
+        aiUsageDialog = new AlertDialog.Builder(this)
+                .setView(root)
+                .setPositiveButton("关闭", null)
+                .create();
+        aiUsageDialog.setOnDismissListener(d -> {
+            balanceRequestSequence++;
+            aiBalanceProvider = null;
+            aiBalanceAmount = null;
+            aiLastUsage = null;
+            aiUsageDialog = null;
+        });
+        aiUsageDialog.show();
+        refreshAiBalance();
+    }
+
+    /** Refresh the provider's actual balance, never interpret it as a token quota. */
+    private void refreshAiBalance() {
+        SharedPreferences settings = getSharedPreferences("ai_settings", MODE_PRIVATE);
+        String provider = settings.getString("provider", "OpenAI");
+        String key = settings.getString("api_key", "").trim();
+        int requestId = ++balanceRequestSequence;
+        aiBalanceProvider.setText(provider + " · API 余额");
+        updateLastUsage();
+        if (!"DeepSeek".equalsIgnoreCase(provider)) {
+            aiBalanceAmount.setText("当前服务商暂不支持余额查询");
+            aiBalanceAmount.setTextSize(15);
+            return;
+        }
+        if (key.isEmpty()) {
+            aiBalanceAmount.setText("请先在设置中填写 API Key");
+            aiBalanceAmount.setTextSize(15);
+            return;
+        }
+        aiBalanceAmount.setText("正在查询余额…");
+        aiBalanceAmount.setTextSize(16);
+        AiBalanceClient.queryDeepSeek(key, result -> runOnUiThread(() -> {
+            if (isFinishing() || aiBalanceAmount == null || requestId != balanceRequestSequence) return;
+            SharedPreferences now = getSharedPreferences("ai_settings", MODE_PRIVATE);
+            if (!"DeepSeek".equalsIgnoreCase(now.getString("provider", "")) ||
+                    !key.equals(now.getString("api_key", "").trim())) return;
+            aiBalanceAmount.setText(result);
+            aiBalanceAmount.setTextSize(18);
+        }));
+    }
+
+    private void updateLastUsage() {
+        if (aiLastUsage == null) return;
+        SharedPreferences settings = getSharedPreferences("ai_settings", MODE_PRIVATE);
+        SharedPreferences stats = getSharedPreferences("token_stats", MODE_PRIVATE);
+        String provider = settings.getString("provider", "OpenAI");
+        String key = settings.getString("api_key", "");
+        String stamp = provider + ":" + key.hashCode();
+        if (!stamp.equals(stats.getString("last_account", ""))) {
+            aiLastUsage.setText("最近一次 AI 请求：暂无记录");
+            return;
+        }
+        long input = stats.getLong("last_prompt_tokens", 0);
+        long output = stats.getLong("last_completion_tokens", 0);
+        aiLastUsage.setText("最近一次请求：输入 " + input + " · 输出 " + output +
+                " · 合计 " + (input + output) + " tokens");
+    }
+
     private void showTokenUsageDialog() {
 
         SharedPreferences preferences =

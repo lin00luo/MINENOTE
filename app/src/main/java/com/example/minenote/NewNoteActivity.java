@@ -12,6 +12,8 @@ import androidx.room.Room;
 public class NewNoteActivity extends AppCompatActivity {
 
     private AppDatabase database;
+    private EditorFeatures editorFeatures;
+    private final java.util.concurrent.ExecutorService saveExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     private EditText titleInput;
     private EditText contentInput;
@@ -23,6 +25,7 @@ public class NewNoteActivity extends AppCompatActivity {
 
     // -1 表示这篇笔记还没有真正创建
     private int noteId = -1;
+    private volatile boolean isDeleting = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,12 +40,14 @@ public class NewNoteActivity extends AppCompatActivity {
                 )
                 .addMigrations(
                         AppDatabaseMigration.MIGRATION_1_2,
-                        AppDatabaseMigrationV3.MIGRATION_2_3
-                )
+                        AppDatabaseMigrationV3.MIGRATION_2_3,
+                        AppDatabaseMigrationV4.MIGRATION_3_4,
+                        AppDatabaseMigrationV5.MIGRATION_4_5)
                 .build();
 
         titleInput = findViewById(R.id.etTitle);
         contentInput = findViewById(R.id.etContent);
+        editorFeatures = new EditorFeatures(this, titleInput, contentInput);
 
         View backButton = findViewById(R.id.btnBack);
         View moreButton = findViewById(R.id.btnMore);
@@ -127,6 +132,7 @@ public class NewNoteActivity extends AppCompatActivity {
      * 延迟自动保存
      */
     private void scheduleAutoSave() {
+        if (isDeleting) return;
 
         saveHandler.removeCallbacks(saveRunnable);
 
@@ -144,6 +150,7 @@ public class NewNoteActivity extends AppCompatActivity {
      * 才创建数据库记录。
      */
     private void saveNote() {
+        if (isDeleting) return;
 
         String title = titleInput.getText().toString().trim();
         String content = contentInput.getText().toString().trim();
@@ -153,17 +160,14 @@ public class NewNoteActivity extends AppCompatActivity {
             return;
         }
 
-        new Thread(() -> {
+        saveExecutor.execute(() -> {
 
             if (noteId == -1) {
 
                 // 第一次保存，创建新笔记
                 Note note = new Note(title, content);
 
-                database.noteDao().insert(note);
-
-                // Room 自动生成 ID
-                noteId = note.getId();
+                noteId = (int) database.noteDao().insert(note);
 
             } else {
 
@@ -180,7 +184,7 @@ public class NewNoteActivity extends AppCompatActivity {
                 }
             }
 
-        }).start();
+        });
     }
 
     /**
@@ -193,15 +197,20 @@ public class NewNoteActivity extends AppCompatActivity {
                 anchor
         );
 
+        popupMenu.getMenu().add("识字 · OCR");
+        popupMenu.getMenu().add("插入图片");
+        popupMenu.getMenu().add("导出笔记");
         popupMenu.getMenu().add("删除笔记");
 
-        popupMenu.getMenu().add(
-                "其他功能（之后添加）"
-        );
+
 
         popupMenu.setOnMenuItemClickListener(item -> {
 
-            if (item.getTitle().toString().equals("删除笔记")) {
+            String action = item.getTitle().toString();
+            if (action.equals("识字 · OCR")) {editorFeatures.openOcr();return true;}
+            if (action.equals("插入图片")) {editorFeatures.pickImage();return true;}
+            if (action.equals("导出笔记")) {editorFeatures.showExport();return true;}
+            if (action.equals("删除笔记")) {
 
                 deleteNote();
 
@@ -231,42 +240,25 @@ public class NewNoteActivity extends AppCompatActivity {
      * 删除笔记
      */
     private void deleteNote() {
-
-        // 还没有创建数据库记录
-        if (noteId == -1) {
-            finish();
-            return;
-        }
-
-        new Thread(() -> {
-
-            Note note =
-                    database.noteDao().getNoteById(noteId);
-
-            if (note != null) {
-
-                database.noteDao().delete(note);
-
-                runOnUiThread(() -> {
-
-                    Toast.makeText(
-                            this,
-                            "笔记已删除",
-                            Toast.LENGTH_SHORT
-                    ).show();
-
-                    finish();
-                });
+        isDeleting = true;
+        saveHandler.removeCallbacks(saveRunnable);
+        saveExecutor.execute(() -> {
+            if (noteId != -1) {
+                Note note = database.noteDao().getNoteById(noteId);
+                if (note != null) database.noteDao().delete(note);
             }
-
-        }).start();
+            runOnUiThread(() -> {
+                Toast.makeText(this, "笔记已删除", Toast.LENGTH_SHORT).show();
+                finish();
+            });
+        });
     }
 
     @Override
     protected void onDestroy() {
 
         saveHandler.removeCallbacks(saveRunnable);
-
+        saveExecutor.shutdown();
         super.onDestroy();
     }
 }

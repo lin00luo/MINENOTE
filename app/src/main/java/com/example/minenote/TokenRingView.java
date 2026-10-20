@@ -11,7 +11,7 @@ public class TokenRingView extends View {
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
-    private int percent = 100;
+    private int percent = -1;
 
     public TokenRingView(Context context) {
         super(context);
@@ -60,7 +60,9 @@ public class TokenRingView extends View {
         canvas.drawArc(rect, 0, 360, false, paint);
 
         int progressColor;
-        if (percent <= 20) {
+        if (percent < 0) {
+            progressColor = 0xFFD4B84C;
+        } else if (percent <= 20) {
             progressColor = 0xFFE57373;
         } else if (percent <= 50) {
             progressColor = 0xFFF0B429;
@@ -72,7 +74,7 @@ public class TokenRingView extends View {
         canvas.drawArc(
                 rect,
                 -90,
-                percent * 3.6f,
+                percent < 0 ? 360 : percent * 3.6f,
                 false,
                 paint
         );
@@ -88,7 +90,7 @@ public class TokenRingView extends View {
                 - (metrics.ascent + metrics.descent) / 2f;
 
         canvas.drawText(
-                String.valueOf(percent),
+                percent < 0 ? "AI" : String.valueOf(percent),
                 center,
                 baseline,
                 paint

@@ -28,6 +28,7 @@ import java.util.Locale;
 
 public class NoteDetailActivity extends AppCompatActivity {
 
+    private EditorFeatures editorFeatures;
     private EditText titleEditText;
     private EditText contentEditText;
 
@@ -58,6 +59,7 @@ public class NoteDetailActivity extends AppCompatActivity {
 
         titleEditText = findViewById(R.id.etDetailTitle);
         contentEditText = findViewById(R.id.etDetailContent);
+        editorFeatures = new EditorFeatures(this, titleEditText, contentEditText);
 
         TextView btnBack = findViewById(R.id.btnBack);
         TextView btnMore = findViewById(R.id.btnMore);
@@ -70,8 +72,8 @@ public class NoteDetailActivity extends AppCompatActivity {
                 .addMigrations(
                         AppDatabaseMigration.MIGRATION_1_2,
                         AppDatabaseMigrationV3.MIGRATION_2_3,
-                        AppDatabaseMigrationV4.MIGRATION_3_4
-                )
+                        AppDatabaseMigrationV4.MIGRATION_3_4,
+                        AppDatabaseMigrationV5.MIGRATION_4_5)
                 .build();
 
         noteDao = database.noteDao();
@@ -169,6 +171,7 @@ public class NoteDetailActivity extends AppCompatActivity {
                 isLoadingNote = true;
                 titleEditText.setText(note.getTitle());
                 contentEditText.setText(note.getContent());
+                InlineImages.render(this, contentEditText);
                 isLoadingNote = false;
             });
         }).start();
@@ -180,18 +183,24 @@ public class NoteDetailActivity extends AppCompatActivity {
         menuLayout.setPadding(dp(6), dp(6), dp(6), dp(6));
         menuLayout.setBackground(createMenuBackground());
 
-        TextView aiItem = createMoreMenuItem("AI 分析", "✦");
+        TextView aiItem = createMoreMenuItem("AI 助手", "✦");
+        TextView ocrItem = createMoreMenuItem("识字 · OCR", "▣");
+        TextView imageItem = createMoreMenuItem("插入图片", "▧");
+        TextView exportItem = createMoreMenuItem("导出笔记", "⇩");
         TextView moveItem = createMoreMenuItem("移动", "↗");
         TextView deleteItem = createMoreMenuItem("删除", "⌫");
 
         menuLayout.addView(aiItem);
+        menuLayout.addView(ocrItem);
+        menuLayout.addView(imageItem);
+        menuLayout.addView(exportItem);
         menuLayout.addView(moveItem);
         menuLayout.addView(deleteItem);
 
         PopupWindow popupWindow = new PopupWindow(
                 menuLayout,
                 dp(190),
-                dp(174),
+                dp(330),
                 true
         );
 
@@ -204,6 +213,10 @@ public class NoteDetailActivity extends AppCompatActivity {
             popupWindow.dismiss();
             showAIAssistant();
         });
+
+        ocrItem.setOnClickListener(v -> {popupWindow.dismiss();editorFeatures.openOcr();});
+        imageItem.setOnClickListener(v -> {popupWindow.dismiss();editorFeatures.pickImage();});
+        exportItem.setOnClickListener(v -> {popupWindow.dismiss();editorFeatures.showExport();});
 
         moveItem.setOnClickListener(v -> {
             popupWindow.dismiss();
@@ -287,6 +300,9 @@ public class NoteDetailActivity extends AppCompatActivity {
                 analyzeWithAI("提取待办事项"));
         addAIOption(root, "润色", "让文字表达更加清晰自然", "Aa", () ->
                 analyzeWithAI("润色这篇笔记"));
+        addAIOption(root, "纠错与排版", "检查错字并整理段落", "✓", () -> analyzeWithAI("纠正错别字并优化排版，不改变事实"));
+        addAIOption(root, "续写", "根据已有内容继续写作", "→", () -> analyzeWithAI("根据这篇笔记自然续写"));
+        addAIOption(root, "扩写", "丰富笔记中的解释和细节", "+", () -> analyzeWithAI("扩写这篇笔记并补充解释"));
         addAIOption(root, "生成复习题", "根据笔记内容生成练习题", "?", this::startQuiz);
         addAIOption(root, "自定义提问", "针对这篇笔记向 AI 提出问题", "…", this::showCustomAIQuestion);
 
@@ -426,7 +442,7 @@ public class NoteDetailActivity extends AppCompatActivity {
 
     private void analyzeWithAI(String task) {
         String content =
-                contentEditText.getText().toString().trim();
+                InlineImages.MARKER.matcher(contentEditText.getText().toString()).replaceAll("[图片]").trim();
 
         if (content.isEmpty()) {
             Toast.makeText(
@@ -1187,13 +1203,19 @@ public class NoteDetailActivity extends AppCompatActivity {
                 .setTitle(task)
                 .setView(root);
 
-        if ("润色这篇笔记".equals(task)) {
+        if ("润色这篇笔记".equals(task) && !InlineImages.MARKER.matcher(contentEditText.getText().toString()).find()) {
             builder.setNegativeButton(
                     "替换原笔记",
                     (dialog, which) -> replaceNoteContent(result)
             );
         }
 
+        builder.setNeutralButton("插入到笔记", (dialog, which) -> {
+            if(result!=null && !result.trim().isEmpty()) {
+                int cursor=Math.max(0,contentEditText.getSelectionStart());
+                contentEditText.getText().insert(Math.min(cursor,contentEditText.length()),"\n\n"+result);
+            }
+        });
         builder.setPositiveButton("关闭", null);
 
         AlertDialog dialog = builder.create();

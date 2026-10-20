@@ -12,7 +12,7 @@ import java.util.List;
 public interface NoteDao {
 
     @Insert
-    void insert(Note note);
+    long insert(Note note);
 
     // 全部笔记
     @Query("SELECT * FROM Note ORDER BY id DESC")

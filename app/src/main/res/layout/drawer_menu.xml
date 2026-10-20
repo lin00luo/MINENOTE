@@ -120,7 +120,9 @@
             android:id="@+id/tokenRingView"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:contentDescription="Token 剩余量" />
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="点击查看 AI 余额与 Token 消耗" />
     </LinearLayout>
 
 </LinearLayout>

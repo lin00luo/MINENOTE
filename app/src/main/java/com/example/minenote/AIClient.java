@@ -901,7 +901,13 @@ public class AIClient {
                     "total_tokens", 0
             );
 
+            SharedPreferences aiSettings = context.getSharedPreferences("ai_settings", Context.MODE_PRIVATE);
+            String provider = aiSettings.getString("provider", "OpenAI");
+            String apiKey = aiSettings.getString("api_key", "");
             preferences.edit()
+                    .putString("last_account", provider + ":" + apiKey.hashCode())
+                    .putLong("last_prompt_tokens", promptTokens)
+                    .putLong("last_completion_tokens", completionTokens)
                     .putLong(
                             "prompt_tokens",
                             oldPrompt + promptTokens
