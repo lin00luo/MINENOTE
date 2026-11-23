@@ -1,6 +1,8 @@
 package com.example.minenote;
 
+import android.Manifest;
 import android.app.AlertDialog;
+import android.content.pm.PackageManager;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -21,6 +23,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.room.Room;
 
 import com.google.mlkit.vision.common.InputImage;
@@ -31,10 +34,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.UUID;
 
-/** Quick Settings screenshot flow. A notification resumes region selection after capture. */
+/** Requests screen capture consent and displays the saved frame for region selection. */
 public class CaptureActivity extends AppCompatActivity {
     private static final int REQUEST_CAPTURE = 702;
-    private String shape = "rect";
+    private static final int REQUEST_NOTIFICATIONS = 703;
+    private String shape;
     private int noteId = -1;
     private Bitmap screenshot;
     private SelectionView selectionView;
@@ -66,7 +70,13 @@ public class CaptureActivity extends AppCompatActivity {
             finish();
             return;
         }
-        chooseShape();
+        if (state != null) shape = state.getString("shape");
+        if (shape == null) chooseShape();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putString("shape", shape);
+        super.onSaveInstanceState(state);
     }
 
     private void chooseShape() {
@@ -78,9 +88,40 @@ public class CaptureActivity extends AppCompatActivity {
     }
 
     private void requestProjection() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_NOTIFICATIONS);
+            return;
+        }
+        launchConsent();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_NOTIFICATIONS) launchConsent();
+    }
+
+    private void launchConsent() {
+        NotificationManagerCompat notifications = NotificationManagerCompat.from(this);
+        android.app.NotificationChannel channel = Build.VERSION.SDK_INT >= 26
+                ? notifications.getNotificationChannel(ScreenCaptureService.CHANNEL_ID) : null;
+        if (!notifications.areNotificationsEnabled() || (channel != null
+                && channel.getImportance() == android.app.NotificationManager.IMPORTANCE_NONE)) {
+            Toast.makeText(this, "请开启 Minenote 通知，以便打开截图选区", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
         MediaProjectionManager manager =
                 (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
-        startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE);
+        try {
+            startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CAPTURE);
+        } catch (RuntimeException e) {
+            Toast.makeText(this, "无法打开屏幕截图授权：" + e.getMessage(), Toast.LENGTH_LONG).show();
+            finish();
+        }
     }
 
     @Override @SuppressWarnings("deprecation")
@@ -97,10 +138,15 @@ public class CaptureActivity extends AppCompatActivity {
         service.putExtra("resultData", data);
         service.putExtra("shape", shape);
         service.putExtra("note_id", noteId);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(service);
-        else startService(service);
-        // Leave the foreground so the captured frame contains the app the user was viewing.
-        finish();
+        try {
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(service);
+            else startService(service);
+        } catch (RuntimeException e) {
+            Toast.makeText(this, "无法启动屏幕截图：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        } finally {
+            // Reveal the app or window selected for sharing.
+            finish();
+        }
     }
 
     private void showSelection() {

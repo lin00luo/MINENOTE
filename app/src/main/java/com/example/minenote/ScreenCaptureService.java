@@ -1,5 +1,6 @@
 package com.example.minenote;
 
+import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -20,6 +21,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.WindowManager;
 
 import androidx.annotation.Nullable;
@@ -32,13 +34,18 @@ import java.nio.ByteBuffer;
 /** Captures one frame after the capture activity has left the foreground. */
 public class ScreenCaptureService extends Service {
     public static final String EXTRA_IMAGE_PATH = "image_path";
-    private static final String CHANNEL_ID = "minenote_screen_capture";
+    static final String CHANNEL_ID = "minenote_screen_capture";
     private static final int NOTIFICATION_ID = 701;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
     private ImageReader imageReader;
-    private boolean delivered;
+    private static final String ACTION_CANCEL = "com.example.minenote.CANCEL_CAPTURE";
+    private static final long FRAME_TIMEOUT_MS = 5000;
+    private boolean capturing;
+    private final MediaProjection.Callback projectionCallback = new MediaProjection.Callback() {
+        @Override public void onStop() { stopCapture(); }
+    };
 
     @Override public void onCreate() {
         super.onCreate();
@@ -46,32 +53,55 @@ public class ScreenCaptureService extends Service {
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        Notification ongoing = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("Minenote 正在截图")
-                .setContentText("正在获取屏幕画面")
-                .setOngoing(true)
-                .build();
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIFICATION_ID, ongoing,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
-        } else startForeground(NOTIFICATION_ID, ongoing);
-
-        if (intent == null) { stopCapture(); return START_NOT_STICKY; }
-        Intent permissionData = getProjectionData(intent);
-        if (permissionData == null) { stopCapture(); return START_NOT_STICKY; }
-        final int resultCode = intent.getIntExtra("resultCode", -1);
-        final String shape = intent.getStringExtra("shape");
-        final int noteId = intent.getIntExtra("note_id", -1);
+        if (intent != null && ACTION_CANCEL.equals(intent.getAction())) {
+            stopCapture();
+            return START_NOT_STICKY;
+        }
+        if (capturing) return START_NOT_STICKY;
+        capturing = true;
+        final String shape = intent == null ? null : intent.getStringExtra("shape");
+        final int noteId = intent == null ? -1 : intent.getIntExtra("note_id", -1);
 
         try {
+            PendingIntent cancel = PendingIntent.getService(this, NOTIFICATION_ID,
+                    new Intent(this, ScreenCaptureService.class).setAction(ACTION_CANCEL),
+                    PendingIntent.FLAG_IMMUTABLE);
+            Notification ongoing = new NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("Minenote 正在截图")
+                    .setContentText("正在获取屏幕画面")
+                    .setOngoing(true)
+                    .addAction(0, "取消截图", cancel)
+                    .build();
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(NOTIFICATION_ID, ongoing,
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+            } else startForeground(NOTIFICATION_ID, ongoing);
+
+            Intent permissionData = intent == null ? null : getProjectionData(intent);
+            int resultCode = intent == null ? Activity.RESULT_CANCELED
+                    : intent.getIntExtra("resultCode", Activity.RESULT_CANCELED);
+            if (permissionData == null || resultCode != Activity.RESULT_OK) {
+                stopCapture();
+                return START_NOT_STICKY;
+            }
             MediaProjectionManager manager =
                     (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
             projection = manager.getMediaProjection(resultCode, permissionData);
             if (projection == null) throw new IllegalStateException("无法启动屏幕捕获");
 
-            // A Service has no associated Display on Android 16.
-            // Use maximum window metrics from the WindowManager instead of Context.getDisplay().
+            projection.registerCallback(projectionCallback, handler);
+            handler.postDelayed(() -> fail(shape, noteId, "等待屏幕画面超时"), FRAME_TIMEOUT_MS);
+            // Let the permission activity leave before producing the first frame.
+            handler.postDelayed(() -> startDisplay(shape, noteId), 650);
+        } catch (RuntimeException e) {
+            fail(shape, noteId, "截图启动失败：" + e.getMessage());
+        }
+        return START_NOT_STICKY;
+    }
+
+    private void startDisplay(String shape, int noteId) {
+        try {
             WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
             final int width;
             final int height;
@@ -88,64 +118,86 @@ public class ScreenCaptureService extends Service {
                 height = metrics.heightPixels;
             }
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
-            projection.registerCallback(new MediaProjection.Callback() {
-                @Override public void onStop() { releaseCapture(); }
-            }, handler);
-
+            imageReader.setOnImageAvailableListener(reader -> captureFrame(reader, shape, noteId), handler);
             virtualDisplay = projection.createVirtualDisplay(
                     "MinenoteCapture", width, height, densityDpi,
                     DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                     imageReader.getSurface(), null, handler);
 
-            // Give Android time to return to the app that was underneath the tile activity.
-            handler.postDelayed(() -> captureFrame(width, height, shape, noteId), 650);
-        } catch (Exception e) {
-            showResultNotification(null, shape, noteId, "截图启动失败：" + e.getMessage());
-            stopCapture();
+            if (virtualDisplay == null) throw new IllegalStateException("无法创建截图显示");
+        } catch (RuntimeException e) {
+            fail(shape, noteId, "截图启动失败：" + e.getMessage());
         }
-        return START_NOT_STICKY;
     }
 
-    private void captureFrame(int width, int height, String shape, int noteId) {
-        if (imageReader == null || delivered) return;
-        imageReader.setOnImageAvailableListener(reader -> {
-            if (delivered) return;
-            Image image = null;
-            try {
-                image = reader.acquireLatestImage();
-                if (image == null) return;
-                delivered = true;
-                Image.Plane plane = image.getPlanes()[0];
-                ByteBuffer buffer = plane.getBuffer();
-                int pixelStride = plane.getPixelStride();
-                int rowPadding = plane.getRowStride() - pixelStride * width;
-                Bitmap padded = Bitmap.createBitmap(
-                        width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
-                buffer.rewind();
-                padded.copyPixelsFromBuffer(buffer);
-                Bitmap frame = Bitmap.createBitmap(padded, 0, 0, width, height);
-                padded.recycle();
+    private void captureFrame(ImageReader reader, String shape, int noteId) {
+        if (reader != imageReader) return;
+        Bitmap frame;
+        try (Image image = reader.acquireLatestImage()) {
+            if (image == null) return;
+            frame = copyFrame(image);
+        } catch (RuntimeException | OutOfMemoryError e) {
+            fail(shape, noteId, "读取屏幕画面失败：" + e.getMessage());
+            return;
+        }
 
-                File output = new File(getCacheDir(),
-                        "minenote_capture_" + System.currentTimeMillis() + ".png");
-                try (FileOutputStream stream = new FileOutputStream(output)) {
-                    if (!frame.compress(Bitmap.CompressFormat.PNG, 100, stream))
-                        throw new IllegalStateException("截图文件写入失败");
-                }
-                frame.recycle();
-                showResultNotification(output.getAbsolutePath(), shape, noteId, null);
-            } catch (Exception e) {
-                showResultNotification(null, shape, noteId, "截图失败：" + e.getMessage());
-            } finally {
-                if (image != null) image.close();
-                stopCapture();
+        // Close the projection and its foreground notification before saving or showing the result.
+        stopCapture();
+        File output = null;
+        try {
+            output = File.createTempFile("minenote_capture_", ".png", getCacheDir());
+            try (FileOutputStream stream = new FileOutputStream(output)) {
+                if (!frame.compress(Bitmap.CompressFormat.PNG, 100, stream))
+                    throw new IllegalStateException("截图文件写入失败");
             }
-        }, handler);
+            showResultNotification(output.getAbsolutePath(), shape, noteId, null);
+        } catch (Exception | OutOfMemoryError e) {
+            if (output != null) output.delete();
+            showResultNotification(null, shape, noteId, "截图保存失败：" + e.getMessage());
+        } finally {
+            frame.recycle();
+        }
+    }
+
+    private Bitmap copyFrame(Image image) {
+        Image.Plane plane = image.getPlanes()[0];
+        ByteBuffer buffer = plane.getBuffer();
+        int width = image.getWidth();
+        int height = image.getHeight();
+        int rowBytes = width * 4;
+        if (plane.getPixelStride() != 4 || plane.getRowStride() < rowBytes)
+            throw new IllegalStateException("不支持的截图像素格式");
+
+        // The final row may omit its trailing padding.
+        ByteBuffer pixels = ByteBuffer.allocate(rowBytes * height);
+        int start = buffer.position();
+        int limit = buffer.limit();
+        for (int row = 0; row < height; row++) {
+            int offset = start + row * plane.getRowStride();
+            buffer.limit(limit);
+            buffer.position(offset);
+            buffer.limit(offset + rowBytes);
+            pixels.put(buffer);
+        }
+        pixels.flip();
+        Bitmap frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        try {
+            frame.copyPixelsFromBuffer(pixels);
+            return frame;
+        } catch (RuntimeException | OutOfMemoryError e) {
+            frame.recycle();
+            throw e;
+        }
+    }
+
+    private void fail(String shape, int noteId, String message) {
+        stopCapture();
+        showResultNotification(null, shape, noteId, message);
     }
 
     private void showResultNotification(String path, String shape, int noteId, String error) {
         Intent open = new Intent(this, CaptureActivity.class);
-        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         if (path != null) open.putExtra(EXTRA_IMAGE_PATH, path);
         if (error != null) open.putExtra("capture_error", error);
         open.putExtra("shape", shape);
@@ -160,7 +212,12 @@ public class ScreenCaptureService extends Service {
                 .setContentIntent(pending)
                 .build();
         NotificationManager manager = getSystemService(NotificationManager.class);
-        manager.notify(NOTIFICATION_ID + 1, result);
+        try {
+            manager.notify(NOTIFICATION_ID + 1, result);
+        } catch (RuntimeException e) {
+            if (path != null) new File(path).delete();
+            Log.w("ScreenCaptureService", "Could not publish capture result", e);
+        }
     }
 
     private Intent getProjectionData(Intent intent) {
@@ -170,23 +227,42 @@ public class ScreenCaptureService extends Service {
     }
 
     private void releaseCapture() {
+        handler.removeCallbacksAndMessages(null);
         VirtualDisplay display = virtualDisplay;
         ImageReader reader = imageReader;
         MediaProjection activeProjection = projection;
         virtualDisplay = null;
         imageReader = null;
         projection = null;
-        try { if (display != null) display.release(); } catch (Exception ignored) {}
-        try { if (reader != null) reader.close(); } catch (Exception ignored) {}
-        try { if (activeProjection != null) activeProjection.stop(); } catch (Exception ignored) {}
+        if (display != null) cleanup(display::release);
+        if (reader != null) {
+            cleanup(() -> reader.setOnImageAvailableListener(null, null));
+            cleanup(reader::close);
+        }
+        if (activeProjection != null) {
+            cleanup(() -> activeProjection.unregisterCallback(projectionCallback));
+            cleanup(activeProjection::stop);
+        }
+    }
+
+    private void cleanup(Runnable action) {
+        try {
+            action.run();
+        } catch (RuntimeException e) {
+            Log.w("ScreenCaptureService", "Capture cleanup failed", e);
+        }
     }
 
     private void stopCapture() {
-        handler.post(() -> {
-            releaseCapture();
-            stopForeground(true);
-            stopSelf();
-        });
+        releaseCapture();
+        stopForeground(true);
+        stopSelf();
+    }
+
+    @Override public void onDestroy() {
+        releaseCapture();
+        stopForeground(true);
+        super.onDestroy();
     }
 
     private void createNotificationChannel() {
