@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">MINENOTE</string>
+    <string name="notes_title">我的笔记</string>
+    <string name="notes_uncategorized">未分类</string>
 </resources>

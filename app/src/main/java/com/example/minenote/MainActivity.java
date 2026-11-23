@@ -34,6 +34,7 @@ public class MainActivity extends AppCompatActivity {
 
     private FolderAdapter folderAdapter;
     private RecyclerView folderRecyclerView;
+    private TextView notesTitle;
     private TextView aiBalanceProvider;
     private TextView aiBalanceAmount;
     private TextView aiLastUsage;
@@ -61,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
 
         drawerLayout = findViewById(R.id.drawerLayout);
         navigationDrawer = findViewById(R.id.navigationDrawer);
+        notesTitle = findViewById(R.id.notesTitle);
 
         findViewById(R.id.tokenRingView).setOnClickListener(v -> showAiUsageDialog());
 
@@ -366,6 +368,7 @@ public class MainActivity extends AppCompatActivity {
 
             runOnUiThread(() -> {
 
+                if (selectedMenuId != -1) return;
                 noteAdapter.setNotes(notes);
                 updateMenuSelection();
             });
@@ -382,6 +385,7 @@ public class MainActivity extends AppCompatActivity {
 
             runOnUiThread(() -> {
 
+                if (selectedMenuId != -2) return;
                 noteAdapter.setNotes(notes);
                 updateMenuSelection();
             });
@@ -402,6 +406,7 @@ public class MainActivity extends AppCompatActivity {
 
             runOnUiThread(() -> {
 
+                if (selectedMenuId != folderId) return;
                 noteAdapter.setNotes(notes);
                 updateMenuSelection();
             });
@@ -422,9 +427,7 @@ public class MainActivity extends AppCompatActivity {
                         folders
                 );
 
-                folderAdapter.setSelectedFolderId(
-                        selectedMenuId
-                );
+                updateMenuSelection();
             });
 
         }).start();
@@ -456,6 +459,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateMenuSelection() {
+        notesTitle.setText(selectedMenuId == -2 ? R.string.notes_uncategorized : R.string.notes_title);
+        if (selectedMenuId > 0) {
+            for (Folder folder : folderAdapter.getFolders()) {
+                if (folder.getId() == selectedMenuId) {
+                    notesTitle.setText(folder.getName());
+                    break;
+                }
+            }
+        }
 
         View allNotes =
                 findViewById(R.id.menuAllNotes);
@@ -1280,6 +1292,7 @@ public class MainActivity extends AppCompatActivity {
 
                             selectedMenuId = -1;
                             loadAllNotes();
+                            updateMenuSelection();
                         }
 
                         loadFolders();
