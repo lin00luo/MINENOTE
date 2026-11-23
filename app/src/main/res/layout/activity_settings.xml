@@ -79,6 +79,21 @@
             android:textColor="#888888"
             android:textSize="12sp" />
 
+        <Switch
+            android:id="@+id/switchFloatingBall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="智能截图悬浮松鼠"
+            android:textColor="#202124"
+            android:padding="8dp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="开启后显示可拖动的圆形悬浮按钮，自动吸附到屏幕左右边缘。首次开启需要允许显示在其他应用上层。"
+            android:textColor="#888888"
+            android:textSize="12sp" />
+
         <!-- API Key -->
         <TextView
             android:layout_width="match_parent"
