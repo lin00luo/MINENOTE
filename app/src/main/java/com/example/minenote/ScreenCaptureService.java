@@ -163,12 +163,15 @@ public class ScreenCaptureService extends Service {
     }
 
     private void releaseCapture() {
-        try { if (virtualDisplay != null) virtualDisplay.release(); } catch (Exception ignored) {}
+        VirtualDisplay display = virtualDisplay;
+        ImageReader reader = imageReader;
+        MediaProjection activeProjection = projection;
         virtualDisplay = null;
-        try { if (imageReader != null) imageReader.close(); } catch (Exception ignored) {}
         imageReader = null;
-        try { if (projection != null) projection.stop(); } catch (Exception ignored) {}
         projection = null;
+        try { if (display != null) display.release(); } catch (Exception ignored) {}
+        try { if (reader != null) reader.close(); } catch (Exception ignored) {}
+        try { if (activeProjection != null) activeProjection.stop(); } catch (Exception ignored) {}
     }
 
     private void stopCapture() {
