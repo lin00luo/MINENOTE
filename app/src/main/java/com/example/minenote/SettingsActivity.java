@@ -2,6 +2,10 @@ package com.example.minenote;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
+import android.os.Build;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
@@ -9,6 +13,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.Switch;
+import android.widget.CompoundButton;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -35,6 +40,31 @@ public class SettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_settings);
+        Switch floatingBall = findViewById(R.id.switchFloatingBall);
+        android.content.SharedPreferences floatingPrefs =
+                getSharedPreferences("floating_ball", MODE_PRIVATE);
+        floatingBall.setChecked(floatingPrefs.getBoolean("enabled", false));
+        floatingBall.setOnCheckedChangeListener((button, checked) -> {
+            if (checked) {
+                if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
+                    floatingPrefs.edit().putBoolean("pending_enable", true).apply();
+                    Intent permission = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:" + getPackageName()));
+                    startActivity(permission);
+                    Toast.makeText(this, "请允许 Minenote 显示在其他应用上层，然后返回此页面", Toast.LENGTH_LONG).show();
+                    button.setChecked(false);
+                    return;
+                }
+                floatingPrefs.edit().putBoolean("enabled", true).apply();
+                Intent service = new Intent(this, FloatingBallService.class);
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(service);
+                else startService(service);
+            } else {
+                floatingPrefs.edit().putBoolean("enabled", false).putBoolean("pending_enable", false).apply();
+                stopService(new Intent(this, FloatingBallService.class));
+            }
+        });
+
         Switch ocrAuto=findViewById(R.id.switchOcrAutoOptimize);
         SharedPreferences ocrPrefs=getSharedPreferences("ocr_settings",MODE_PRIVATE);
         ocrAuto.setChecked(ocrPrefs.getBoolean("auto_optimize",false));
