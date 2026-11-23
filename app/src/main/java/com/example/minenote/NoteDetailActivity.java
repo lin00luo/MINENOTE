@@ -80,6 +80,10 @@ public class NoteDetailActivity extends AppCompatActivity {
         folderDao = database.folderDao();
 
         int noteId = getIntent().getIntExtra("note_id", -1);
+        if (noteId >= 0) {
+            getSharedPreferences("capture_state", MODE_PRIVATE).edit()
+                    .putInt("current_note_id", noteId).apply();
+        }
 
         if (noteId == -1) {
             Toast.makeText(this, "笔记不存在", Toast.LENGTH_SHORT).show();
