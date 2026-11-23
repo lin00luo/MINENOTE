@@ -70,23 +70,30 @@ public class ScreenCaptureService extends Service {
             projection = manager.getMediaProjection(resultCode, permissionData);
             if (projection == null) throw new IllegalStateException("无法启动屏幕捕获");
 
-            DisplayMetrics metrics = new DisplayMetrics();
+            // A Service has no associated Display on Android 16.
+            // Use maximum window metrics from the WindowManager instead of Context.getDisplay().
             WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+            final int width;
+            final int height;
+            final int densityDpi = getResources().getDisplayMetrics().densityDpi;
             if (Build.VERSION.SDK_INT >= 30) {
-                android.view.Display display = getDisplay();
-                if (display == null) display = wm.getDefaultDisplay();
-                display.getRealMetrics(metrics);
-            } else wm.getDefaultDisplay().getRealMetrics(metrics);
-
-            final int width = metrics.widthPixels;
-            final int height = metrics.heightPixels;
+                android.graphics.Rect bounds = wm.getMaximumWindowMetrics().getBounds();
+                width = bounds.width();
+                height = bounds.height();
+            } else {
+                DisplayMetrics metrics = new DisplayMetrics();
+                //noinspection deprecation
+                wm.getDefaultDisplay().getRealMetrics(metrics);
+                width = metrics.widthPixels;
+                height = metrics.heightPixels;
+            }
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
             projection.registerCallback(new MediaProjection.Callback() {
                 @Override public void onStop() { releaseCapture(); }
             }, handler);
 
             virtualDisplay = projection.createVirtualDisplay(
-                    "MinenoteCapture", width, height, metrics.densityDpi,
+                    "MinenoteCapture", width, height, densityDpi,
                     DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                     imageReader.getSurface(), null, handler);
 
