@@ -63,6 +63,22 @@
             android:layout_marginTop="8dp"
             android:background="#FFFFFF" />
 
+        <!-- OCR AI preference: independent of API provider credentials -->
+        <Switch
+            android:id="@+id/switchOcrAutoOptimize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="识字后自动 AI 优化"
+            android:textColor="#202124"
+            android:padding="8dp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="默认关闭。开启后会将 OCR 文字发送至当前 AI 服务商，并产生 Token 消耗；识别原文会保留。"
+            android:textColor="#888888"
+            android:textSize="12sp" />
+
         <!-- API Key -->
         <TextView
             android:layout_width="match_parent"

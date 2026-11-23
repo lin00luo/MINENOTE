@@ -8,6 +8,7 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Switch;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -34,6 +35,10 @@ public class SettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_settings);
+        Switch ocrAuto=findViewById(R.id.switchOcrAutoOptimize);
+        SharedPreferences ocrPrefs=getSharedPreferences("ocr_settings",MODE_PRIVATE);
+        ocrAuto.setChecked(ocrPrefs.getBoolean("auto_optimize",false));
+        ocrAuto.setOnCheckedChangeListener((button,checked)->ocrPrefs.edit().putBoolean("auto_optimize",checked).apply());
 
         // 获取控件
         spinnerProvider = findViewById(R.id.spinnerProvider);
