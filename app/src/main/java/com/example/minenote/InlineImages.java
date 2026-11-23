@@ -1,14 +1,24 @@
 package com.example.minenote;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
+import android.text.Layout;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.ImageSpan;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
+import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.Toast;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -76,11 +86,100 @@ public final class InlineImages {
             int height = Math.max(1, (int)((double)bmp.getHeight() * width / bmp.getWidth()));
             BitmapDrawable drawable = new BitmapDrawable(context.getResources(), bmp);
             drawable.setBounds(0, 0, width, height);
-            value.setSpan(new ImageSpan(drawable, ImageSpan.ALIGN_BOTTOM), matcher.start(), matcher.end(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            value.setSpan(new ImageSpan(drawable, f.getAbsolutePath(), ImageSpan.ALIGN_BOTTOM),
+                    matcher.start(), matcher.end(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         int cursor = Math.max(0, editor.getSelectionStart());
         editor.setText(value);
         editor.setSelection(Math.min(cursor, editor.length()));
+        enablePreview(editor);
+    }
+
+    private static void enablePreview(EditText editor) {
+        GestureDetector detector = new GestureDetector(editor.getContext(),
+                new GestureDetector.SimpleOnGestureListener() {
+                    private ImageSpan firstImage;
+
+                    @Override public boolean onDoubleTap(MotionEvent firstDown) {
+                        firstImage = imageAt(editor, firstDown);
+                        return false;
+                    }
+
+                    @Override public boolean onDoubleTapEvent(MotionEvent event) {
+                        if (firstImage == null) return false;
+                        ImageSpan tapped = imageAt(editor, event);
+                        if (event.getActionMasked() == MotionEvent.ACTION_DOWN && tapped != firstImage) {
+                            firstImage = null;
+                            return false;
+                        }
+                        if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                            if (tapped == firstImage) showPreview(editor.getContext(), tapped.getSource());
+                            firstImage = null;
+                        } else if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                            firstImage = null;
+                        }
+                        return true;
+                    }
+                });
+        detector.setIsLongpressEnabled(false);
+        editor.setOnTouchListener((view, event) -> detector.onTouchEvent(event));
+    }
+
+    private static ImageSpan imageAt(EditText editor, MotionEvent event) {
+        Layout layout = editor.getLayout();
+        if (layout == null) return null;
+        float x = event.getX() - editor.getTotalPaddingLeft() + editor.getScrollX();
+        float y = event.getY() - editor.getTotalPaddingTop() + editor.getScrollY();
+        if (y < 0 || y >= layout.getHeight()) return null;
+        int line = layout.getLineForVertical((int) y);
+        Spannable text = editor.getText();
+        for (ImageSpan span : text.getSpans(layout.getLineStart(line), layout.getLineEnd(line),
+                ImageSpan.class)) {
+            int start = text.getSpanStart(span);
+            if (span.getSource() == null || layout.getLineForOffset(start) != line) continue;
+            float left = layout.getPrimaryHorizontal(start);
+            int bottom = layout.getLineBottom(line);
+            if (x >= left && x < left + span.getDrawable().getBounds().width()
+                    && y >= bottom - span.getDrawable().getBounds().height()) {
+                return span;
+            }
+        }
+        return null;
+    }
+
+    private static void showPreview(Context context, String path) {
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(path, options);
+        options.inSampleSize = 1;
+        while (Math.max(options.outWidth, options.outHeight) / options.inSampleSize > 2560) {
+            options.inSampleSize *= 2;
+        }
+        options.inJustDecodeBounds = false;
+        Bitmap bitmap = BitmapFactory.decodeFile(path, options);
+        if (bitmap == null) {
+            Toast.makeText(context, "无法打开图片", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Dialog dialog = new Dialog(context, android.R.style.Theme_Material_NoActionBar);
+        LinearLayout root = new LinearLayout(context);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.BLACK);
+        Button close = new Button(context);
+        close.setText("关闭预览");
+        close.setOnClickListener(view -> dialog.dismiss());
+        root.addView(close, new LinearLayout.LayoutParams(-1, -2));
+        ImageView image = new ImageView(context);
+        image.setContentDescription("笔记图片预览");
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setImageBitmap(bitmap);
+        root.addView(image, new LinearLayout.LayoutParams(-1, 0, 1));
+        dialog.setContentView(root);
+        dialog.setOnDismissListener(ignored -> image.setImageDrawable(null));
+        dialog.show();
+        dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT);
     }
 
     public static void insert(Context context, EditText editor, Uri uri) {
