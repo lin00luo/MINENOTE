@@ -30,6 +30,7 @@ public class ReaderActivity extends AppCompatActivity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private LinearLayout content;
     private LinearLayout sourceStrip;
+    private final List<TextView> filterTabs = new ArrayList<>();
     private int filterMode = 0; // 0 all, 1 unread, 2 saved
     private int selectedSourceId = -1;
     private String searchQuery = "";
@@ -61,27 +62,43 @@ public class ReaderActivity extends AppCompatActivity {
         titles.addView(text("Reader",27,Color.rgb(37,37,34),true));
         titles.addView(text("把值得读的内容，慢慢收进来",12,Color.rgb(139,136,126),false));
         header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
-        TextView search = action("⌕",24); search.setOnClickListener(v->showSearchDialog()); header.addView(search);
-        TextView add = action("＋",23); add.setBackground(round(Color.rgb(242,222,174),dp(15)));
-        add.setOnClickListener(v -> showAddSourceDialog()); header.addView(add);
         root.addView(header);
 
         LinearLayout intro = new LinearLayout(this); intro.setOrientation(LinearLayout.VERTICAL);
-        intro.setPadding(0,dp(22),0,dp(12));
-        intro.addView(text("今日阅读",17,Color.rgb(55,53,48),true));
-        intro.addView(text("订阅你感兴趣的内容，保持好奇。",12,Color.rgb(145,141,132),false));
+        intro.setPadding(0,dp(25),0,dp(13));
+        intro.addView(text("今日阅读",19,Color.rgb(55,53,48),true));
+        intro.addView(text("订阅你感兴趣的内容，保持好奇。",13,Color.rgb(145,141,132),false));
         root.addView(intro);
+
+        // Keep primary actions below the title block, away from the status bar.
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        actions.setPadding(0,0,0,dp(15));
+        TextView search = action("⌕",23);
+        search.setOnClickListener(v->showSearchDialog());
+        TextView add = action("＋",23);
+        add.setBackground(round(Color.rgb(242,222,174),dp(15)));
+        add.setOnClickListener(v -> showAddSourceDialog());
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(dp(46),dp(44));
+        actionParams.leftMargin=dp(9);
+        actions.addView(search,actionParams);
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(dp(46),dp(44));
+        addParams.leftMargin=dp(9);
+        actions.addView(add,addParams);
+        root.addView(actions);
 
         LinearLayout tabs = new LinearLayout(this);
         tabs.setGravity(Gravity.CENTER_VERTICAL);
-        tabs.setPadding(0,0,0,dp(12));
+        tabs.setPadding(0,0,0,dp(13));
         String[] names={"全部","未读","收藏"};
+        filterTabs.clear();
         for(int i=0;i<names.length;i++){
             final int mode=i;
             TextView chip=tab(names[i],filterMode==i);
+            filterTabs.add(chip);
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,-2);p.rightMargin=dp(8);
             tabs.addView(chip,p);
-            chip.setOnClickListener(v->{filterMode=mode;reload();});
+            chip.setOnClickListener(v->{filterMode=mode;updateFilterTabs();reload();});
         }
         root.addView(tabs);
 
@@ -109,9 +126,19 @@ public class ReaderActivity extends AppCompatActivity {
 
     private TextView tab(String label, boolean active) {
         TextView t=text(label,13,active?Color.rgb(91,68,28):Color.rgb(120,117,108),active);
-        t.setPadding(dp(16),dp(9),dp(16),dp(9));
-        t.setBackground(round(active?Color.rgb(242,226,190):Color.WHITE,dp(18)));
+        t.setPadding(dp(18),dp(10),dp(18),dp(10));
+        t.setBackground(round(active?Color.rgb(242,226,190):Color.WHITE,dp(20)));
         return t;
+    }
+
+    private void updateFilterTabs() {
+        for(int i=0;i<filterTabs.size();i++){
+            TextView tab=filterTabs.get(i);
+            boolean active=(i==filterMode);
+            tab.setTextColor(active?Color.rgb(91,68,28):Color.rgb(120,117,108));
+            tab.setTypeface(null,active?Typeface.BOLD:Typeface.NORMAL);
+            tab.setBackground(round(active?Color.rgb(242,226,190):Color.WHITE,dp(20)));
+        }
     }
 
     private void reload() {
@@ -141,7 +168,7 @@ public class ReaderActivity extends AppCompatActivity {
             TextView all=tab("全部来源",selectedSourceId==-1);sourceStrip.addView(all);
             all.setOnClickListener(v->{selectedSourceId=-1;reload();});
             for(ReaderSource source:sources){
-                TextView chip=tab(source.title,selectedSourceId==source.id);
+                TextView chip=tab(sourceDisplayName(source),selectedSourceId==source.id);
                 LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,-2);cp.leftMargin=dp(7);sourceStrip.addView(chip,cp);
                 chip.setOnClickListener(v->{selectedSourceId=source.id;reload();});
                 chip.setOnLongClickListener(v->{new AlertDialog.Builder(this).setTitle(source.title)
@@ -178,13 +205,51 @@ public class ReaderActivity extends AppCompatActivity {
         }
     }
 
-    private String sourceName(List<ReaderSource> sources,int id){for(ReaderSource s:sources)if(s.id==id)return s.title;return "订阅";}
+    private String sourceName(List<ReaderSource> sources,int id){for(ReaderSource s:sources)if(s.id==id)return sourceDisplayName(s);return "订阅";}
+    private String sourceDisplayName(ReaderSource source){
+        String title=safe(source.title).trim();
+        if(title.isEmpty() || title.matches("(?i)^https?://.*")){
+            try{
+                String host=new java.net.URI(source.url).getHost();
+                if(host!=null)return host.replaceFirst("(?i)^www\\.","");
+            }catch(Exception ignored){}
+        }
+        if(title.length()>30)title=title.substring(0,27)+"…";
+        return title.isEmpty()?"订阅源":title;
+    }
     private String safe(String s){return s==null?"":s;}
     private String dateLabel(long time){if(time<=0)return "";return new SimpleDateFormat("MM月dd日",Locale.CHINA).format(new Date(time));}
     private void showSearchDialog(){
-        EditText input=new EditText(this);input.setSingleLine(true);input.setHint("搜索标题、摘要或作者");input.setText(searchQuery);
-        new AlertDialog.Builder(this).setTitle("搜索文章").setView(input).setNegativeButton("清除",(d,w)->{searchQuery="";reload();})
-                .setNeutralButton("取消",null).setPositiveButton("搜索",(d,w)->{searchQuery=input.getText().toString().trim();reload();}).show();
+        final android.app.Dialog dialog=new android.app.Dialog(this);
+        LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(22),dp(22),dp(22),dp(18));
+        panel.setBackground(round(Color.rgb(250,248,242),dp(25)));
+        panel.addView(text("搜索文章",20,Color.rgb(48,46,41),true));
+        TextView hint=text("按标题、摘要或作者查找你收藏的内容",12,Color.rgb(143,138,127),false);
+        hint.setPadding(0,dp(6),0,dp(16));panel.addView(hint);
+        EditText input=new EditText(this);input.setSingleLine(true);input.setTextSize(15);
+        input.setTextColor(Color.rgb(55,52,46));input.setHintTextColor(Color.rgb(157,151,140));
+        input.setHint("输入关键词…");input.setText(searchQuery);
+        input.setPadding(dp(15),dp(12),dp(15),dp(12));
+        input.setBackground(round(Color.WHITE,dp(15)));
+        panel.addView(input,new LinearLayout.LayoutParams(-1,dp(50)));
+        LinearLayout buttons=new LinearLayout(this);buttons.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+        buttons.setPadding(0,dp(18),0,0);
+        TextView clear=dialogButton("清除",false),cancel=dialogButton("取消",false),search=dialogButton("搜索",true);
+        buttons.addView(clear);buttons.addView(cancel);buttons.addView(search);panel.addView(buttons);
+        clear.setOnClickListener(v->{searchQuery="";dialog.dismiss();reload();});
+        cancel.setOnClickListener(v->dialog.dismiss());
+        search.setOnClickListener(v->{searchQuery=input.getText().toString().trim();dialog.dismiss();reload();});
+        dialog.setContentView(panel);dialog.setCancelable(true);dialog.show();
+        android.view.Window window=dialog.getWindow();
+        if(window!=null){window.setBackgroundDrawableResource(android.R.color.transparent);window.setLayout(getResources().getDisplayMetrics().widthPixels-dp(42),-2);}
+    }
+
+    private TextView dialogButton(String value,boolean primary){
+        TextView button=text(value,13,primary?Color.WHITE:Color.rgb(105,99,87),true);
+        button.setGravity(Gravity.CENTER);button.setPadding(dp(15),dp(10),dp(15),dp(10));
+        button.setBackground(round(primary?Color.rgb(190,146,62):Color.rgb(242,238,229),dp(14)));
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(40));p.leftMargin=dp(7);button.setLayoutParams(p);return button;
     }
 
     private void showAddSourceDialog() {
