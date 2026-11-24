@@ -63,14 +63,14 @@ public class ReaderArticleActivity extends AppCompatActivity {
 
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setClipToPadding(false);
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(dp(23),dp(24),dp(23),dp(34));
-        TextView sourceLabel=label(sourceInfo==null?"MINENOTE READER":sourceInfo.title.toUpperCase(),11,Color.rgb(153,119,58),true);
+        TextView sourceLabel=label(sourceInfo==null?"MINENOTE READER":sourceInfo.title.toUpperCase(java.util.Locale.ROOT),11,Color.rgb(153,119,58),true);
         sourceLabel.setPadding(0,0,0,dp(13));page.addView(sourceLabel);
         TextView title=label(article.title,29,Color.rgb(39,38,34),true);title.setLineSpacing(dp(4),1.04f);page.addView(title);
         String author=article.author==null||article.author.trim().isEmpty()?"":article.author+"  ·  ";
         TextView metadata=label(author+dateLabel(article.publishedAt),12,Color.rgb(142,137,127),false);
         metadata.setPadding(0,dp(14),0,dp(23));page.addView(metadata);
         View rule=new View(this);rule.setBackgroundColor(Color.rgb(230,225,214));page.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));
-        bodyView=label(articleText==null||articleText.isEmpty()?"暂时无法提取正文。你可以查看原网页，或使用 RSS 摘要。":articleText,bodyTextSize,Color.rgb(61,58,52),false);
+        bodyView=label(articleText==null||articleText.isEmpty()?"暂时无法提取正文。你可以查看原网页，或使用 RSS 摘要。":articleText,(int)bodyTextSize,Color.rgb(61,58,52),false);
         bodyView.setPadding(0,dp(24),0,dp(20));bodyView.setTextIsSelectable(true);bodyView.setLineSpacing(dp(8),1.27f);
         bodyView.setCustomSelectionActionModeCallback(new ActionMode.Callback(){
             @Override public boolean onCreateActionMode(ActionMode mode,Menu menu){menu.add(0,1,1,"加入笔记");menu.add(0,2,2,"询问 AI");return true;}
