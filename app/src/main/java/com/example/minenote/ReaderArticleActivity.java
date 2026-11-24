@@ -37,8 +37,8 @@ public class ReaderArticleActivity extends AppCompatActivity {
         buildLoading();
         int id=getIntent().getIntExtra("article_id",-1);
         io.execute(()->{article=db.readerDao().getArticle(id);if(article==null){runOnUiThread(this::finish);return;}
-            String text=article.content==null?"":article.content;
-            if(text.length()<100) text=ReaderFetcher.extractArticle(article.url,article.summary);
+            String fallback=article.content==null?article.summary:article.content;
+            String text=ReaderFetcher.extractArticle(article.url,fallback);
             article.content=text; article.isRead=true; db.readerDao().updateArticle(article);
             String finalText=text;runOnUiThread(()->render(finalText));});
     }
