@@ -336,6 +336,11 @@ public class MainActivity extends AppCompatActivity {
                         showCreateFolderDialog()
                 );
 
+        findViewById(R.id.menuReader).setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, ReaderActivity.class));
+            drawerLayout.closeDrawer(Gravity.START);
+        });
+
         findViewById(R.id.menuSettings)
                 .setOnClickListener(v -> {
 
