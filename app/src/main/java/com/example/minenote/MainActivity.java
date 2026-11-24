@@ -470,6 +470,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateMenuSelection() {
+        View folderAiButton = findViewById(R.id.btnFolderAi);
+        if (folderAiButton != null) {
+            folderAiButton.setVisibility(selectedMenuId > 0 ? View.VISIBLE : View.GONE);
+        }
         notesTitle.setText(selectedMenuId == -2 ? R.string.notes_uncategorized : R.string.notes_title);
         if (selectedMenuId > 0) {
             for (Folder folder : folderAdapter.getFolders()) {
