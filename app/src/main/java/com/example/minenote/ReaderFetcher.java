@@ -3,7 +3,6 @@ package com.example.minenote;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Node;
 import org.jsoup.parser.Parser;
 import org.jsoup.select.Elements;
 import java.net.URI;
@@ -74,7 +73,8 @@ public final class ReaderFetcher {
             if (a.guid.isEmpty()) a.guid = a.url;
             a.author = text(entry, "author name");
             if (a.author.isEmpty()) a.author = childText(entry, "dc:creator");
-            a.summary = firstHtml(entry, "description", "summary");
+            a.summary = text(entry, "description");
+            if (a.summary.isEmpty()) a.summary = text(entry, "summary");
             a.content = firstHtml(entry, "content:encoded", "content");
             if (a.content.isEmpty()) a.content = a.summary;
             a.publishedAt = System.currentTimeMillis();
@@ -83,11 +83,9 @@ public final class ReaderFetcher {
         return result;
     }
 
-    /**
-     * Returns sanitized article HTML, not flattened text. Keeping the markup here is
-     * important: the native reader needs paragraph, heading, list and image boundaries.
-     */
+    /** Returns sanitized article HTML; semantic structure and images are retained. */
     public static String extractArticle(String articleUrl, String fallback) {
+        String baseUrl = articleUrl == null ? "" : articleUrl;
         try {
             String url = normalizeHttpUrl(articleUrl);
             Document doc = Jsoup.connect(url)
@@ -98,9 +96,9 @@ public final class ReaderFetcher {
                 return sanitizeArticleHtml(article, doc.baseUri());
             }
         } catch (Exception ignored) {
-            // RSS content is still useful when the publisher blocks direct page fetching.
+            // RSS content remains available when a publisher blocks direct page fetching.
         }
-        return cleanFallback(fallback);
+        return cleanFallback(fallback, baseUrl);
     }
 
     private static Element findArticleContainer(Document doc) {
@@ -137,26 +135,17 @@ public final class ReaderFetcher {
         fragment.select("script,style,noscript,iframe,form,button,nav,footer,header,aside,svg").remove();
 
         for (Element element : fragment.getAllElements()) {
-            // Remove active content and presentation styles while preserving semantic tags.
-            List<Node> attributesToRemove = new ArrayList<>();
+            List<String> remove = new ArrayList<>();
             for (org.jsoup.nodes.Attribute attribute : element.attributes()) {
                 String key = attribute.getKey().toLowerCase(java.util.Locale.ROOT);
                 if (key.startsWith("on") || key.equals("style") || key.equals("srcdoc")) {
-                    attributesToRemove.add(element);
-                    break;
+                    remove.add(attribute.getKey());
                 }
             }
-            if (!attributesToRemove.isEmpty()) {
-                element.removeAttr("style");
-                List<String> names = new ArrayList<>();
-                for (org.jsoup.nodes.Attribute attribute : element.attributes()) {
-                    String key = attribute.getKey().toLowerCase(java.util.Locale.ROOT);
-                    if (key.startsWith("on") || key.equals("srcdoc")) names.add(attribute.getKey());
-                }
-                for (String name : names) element.removeAttr(name);
-            }
+            for (String name : remove) element.removeAttr(name);
+
             if (element.normalName().equals("img")) {
-                if (!element.hasAttr("src") || element.attr("src").trim().isEmpty()) {
+                if (element.attr("src").trim().isEmpty()) {
                     String lazy = element.hasAttr("data-src") ? element.attr("data-src")
                             : element.attr("data-original");
                     if (!lazy.isEmpty()) element.attr("src", lazy);
@@ -164,7 +153,6 @@ public final class ReaderFetcher {
                 String imageUrl = element.absUrl("src");
                 if (!imageUrl.isEmpty()) element.attr("src", imageUrl);
                 element.removeAttr("srcset");
-                element.attr("alt", element.attr("alt"));
             } else if (element.normalName().equals("a")) {
                 String href = element.absUrl("href");
                 if (!href.isEmpty()) element.attr("href", href);
@@ -174,18 +162,21 @@ public final class ReaderFetcher {
         return fragment.body().html().trim();
     }
 
-    /** Normalize RSS HTML, including feeds that double-escape their markup. */
-    private static String cleanFallback(String html) {
+    /** Normalize RSS fragments, including feeds that encode their HTML as text. */
+    private static String cleanFallback(String html, String baseUri) {
         if (html == null || html.trim().isEmpty()) return "";
-        Document fragment = Jsoup.parseBodyFragment(html);
+        Document fragment = Jsoup.parseBodyFragment(html, baseUri);
         fragment.select("script,style,noscript,iframe").remove();
-
         String visible = fragment.body().text();
-        if (visible.matches("(?is).*&lt;\\s*/?\\s*(p|div|h[1-6]|li|blockquote|img)\\b.*")) {
-            fragment = Jsoup.parseBodyFragment(org.jsoup.parser.Parser.unescapeEntities(visible, false));
-            fragment.select("script,style,noscript,iframe").remove();
+
+        if (visible.matches("(?is).*<\\s*/?\\s*(p|div|h[1-6]|li|blockquote|img)\\b.*")) {
+            fragment = Jsoup.parseBodyFragment(visible, baseUri);
+        } else if (visible.matches("(?is).*&lt;\\s*/?\\s*(p|div|h[1-6]|li|blockquote|img)\\b.*")) {
+            fragment = Jsoup.parseBodyFragment(
+                    Parser.unescapeEntities(visible, false), baseUri);
         }
-        return sanitizeArticleHtml(fragment.body(), "");
+        fragment.select("script,style,noscript,iframe").remove();
+        return sanitizeArticleHtml(fragment.body(), baseUri);
     }
 
     private static String firstHtml(Element parent, String... selectors) {
@@ -195,7 +186,9 @@ public final class ReaderFetcher {
             String html = element.html().trim();
             if (!html.isEmpty()) return html;
             String value = element.text().trim();
-            if (!value.isEmpty()) return "<p>" + org.jsoup.nodes.Entities.escape(value) + "</p>";
+            if (!value.isEmpty()) {
+                return "<p>" + org.jsoup.nodes.Entities.escape(value) + "</p>";
+            }
         }
         return "";
     }
