@@ -52,6 +52,13 @@ public class ReaderActivity extends AppCompatActivity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(248,247,242));
         root.setPadding(dp(18),dp(10),dp(18),0);
+        if(android.os.Build.VERSION.SDK_INT>=30){
+            root.setOnApplyWindowInsetsListener((v,insets)->{
+                android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());
+                v.setPadding(dp(18),bars.top+dp(10),dp(18),bars.bottom);
+                return insets;
+            });
+        }
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
