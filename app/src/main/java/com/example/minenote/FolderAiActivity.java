@@ -55,7 +55,7 @@ public class FolderAiActivity extends AppCompatActivity {
                 .addMigrations(AppDatabaseMigration.MIGRATION_1_2,
                         AppDatabaseMigrationV3.MIGRATION_2_3,
                         AppDatabaseMigrationV4.MIGRATION_3_4,
-                        AppDatabaseMigrationV5.MIGRATION_4_5)
+                        AppDatabaseMigrationV5.MIGRATION_4_5,\n                        ReaderDatabaseMigrationV6.MIGRATION_5_6)
                 .build();
         buildUi();
         addMessage("assistant", "你好！我是 " + folderName + " 的 AI 助手。你可以让我总结资料、回答问题、分析笔记之间的联系，或生成一篇新笔记。");
