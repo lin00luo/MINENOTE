@@ -92,10 +92,19 @@ public final class ReaderFetcher {
             if (article == null) article = doc.selectFirst("main");
             if (article == null) article = doc.body();
             String text = article == null ? "" : article.text();
-            return text.length() >= 80 ? text : (fallback == null ? text : fallback);
+            return text.length() >= 80 ? text : cleanFallback(fallback == null ? text : fallback);
         } catch (Exception e) {
-            return fallback == null ? "" : fallback;
+            return cleanFallback(fallback);
         }
+    }
+
+    /** Convert RSS HTML fragments to readable plain text so tags never leak into the UI. */
+    private static String cleanFallback(String html) {
+        if (html == null || html.trim().isEmpty()) return "";
+        Document fragment = Jsoup.parseBodyFragment(html);
+        fragment.select("script,style,noscript,iframe").remove();
+        return fragment.body().text().replaceAll("\\u00a0", " ")
+                .replaceAll("[\\t ]+", " ").trim();
     }
 
     private static String childText(Element parent, String tag) {
