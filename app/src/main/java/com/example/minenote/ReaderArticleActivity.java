@@ -25,7 +25,9 @@ public class ReaderArticleActivity extends AppCompatActivity {
     private AppDatabase db;
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private ReaderArticle article;
+    private ReaderSource sourceInfo;
     private TextView bodyView;
+    private float bodyTextSize=18f;
     private String selectedText="";
 
     @Override protected void onCreate(Bundle state) {
@@ -36,7 +38,7 @@ public class ReaderArticleActivity extends AppCompatActivity {
                         ReaderDatabaseMigrationV6.MIGRATION_5_6).build();
         buildLoading();
         int id=getIntent().getIntExtra("article_id",-1);
-        io.execute(()->{article=db.readerDao().getArticle(id);if(article==null){runOnUiThread(this::finish);return;}
+        io.execute(()->{article=db.readerDao().getArticle(id);if(article==null){runOnUiThread(this::finish);return;} sourceInfo=db.readerDao().getSource(article.sourceId);
             String fallback=article.content==null?article.summary:article.content;
             String text=ReaderFetcher.extractArticle(article.url,fallback);
             article.content=text; article.isRead=true; db.readerDao().updateArticle(article);
@@ -48,29 +50,51 @@ public class ReaderArticleActivity extends AppCompatActivity {
     }
 
     private void render(String articleText) {
-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(250,248,242));
-        LinearLayout bar=new LinearLayout(this);bar.setGravity(android.view.Gravity.CENTER_VERTICAL);bar.setPadding(dp(14),dp(10),dp(14),dp(10));
-        TextView back=label("‹",30,Color.DKGRAY,true);bar.addView(back);back.setOnClickListener(v->finish());
-        TextView source=label("  Reader",14,Color.GRAY,false);bar.addView(source,new LinearLayout.LayoutParams(0,-2,1));
-        TextView save=label(article.isSaved?"★":"☆",25,Color.rgb(176,132,39),true);bar.addView(save);
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(248,247,242));
+        LinearLayout bar=new LinearLayout(this);bar.setGravity(android.view.Gravity.CENTER_VERTICAL);bar.setPadding(dp(16),dp(9),dp(16),dp(9));
+        TextView back=label("‹",30,Color.rgb(55,52,46),false);back.setGravity(android.view.Gravity.CENTER);bar.addView(back,new LinearLayout.LayoutParams(dp(40),dp(42)));back.setOnClickListener(v->finish());
+        LinearLayout barTitle=new LinearLayout(this);barTitle.setOrientation(LinearLayout.VERTICAL);
+        barTitle.addView(label("Reader",15,Color.rgb(52,50,45),true));
+        barTitle.addView(label("沉浸阅读",10,Color.rgb(145,140,130),false));
+        bar.addView(barTitle,new LinearLayout.LayoutParams(0,-2,1));
+        TextView save=label(article.isSaved?"★":"☆",25,Color.rgb(177,133,49),true);save.setGravity(android.view.Gravity.CENTER);bar.addView(save,new LinearLayout.LayoutParams(dp(42),dp(42)));
         save.setOnClickListener(v->{article.isSaved=!article.isSaved;save.setText(article.isSaved?"★":"☆");io.execute(()->db.readerDao().updateArticle(article));});
         root.addView(bar);
-        ScrollView scroll=new ScrollView(this);
-        LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(dp(22),dp(14),dp(22),dp(36));
-        TextView title=label(article.title,26,Color.rgb(35,35,35),true);title.setLineSpacing(dp(3),1.08f);page.addView(title);
-        String meta=(article.author==null?"":article.author+"  ·  ")+(article.url==null?"":article.url);
-        TextView metadata=label(meta,11,Color.GRAY,false);metadata.setPadding(0,dp(10),0,dp(22));page.addView(metadata);
-        bodyView=label(articleText==null||articleText.isEmpty()?"暂时无法提取正文。你可以查看原网页，或使用 RSS 摘要。":articleText,17,Color.rgb(54,52,48),false);
-        bodyView.setTextIsSelectable(true);bodyView.setLineSpacing(dp(7),1.25f);bodyView.setCustomSelectionActionModeCallback(new ActionMode.Callback(){
+
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setClipToPadding(false);
+        LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(dp(23),dp(24),dp(23),dp(34));
+        TextView sourceLabel=label(sourceInfo==null?"MINENOTE READER":sourceInfo.title.toUpperCase(),11,Color.rgb(153,119,58),true);
+        sourceLabel.setPadding(0,0,0,dp(13));page.addView(sourceLabel);
+        TextView title=label(article.title,29,Color.rgb(39,38,34),true);title.setLineSpacing(dp(4),1.04f);page.addView(title);
+        String author=article.author==null||article.author.trim().isEmpty()?"":article.author+"  ·  ";
+        TextView metadata=label(author+dateLabel(article.publishedAt),12,Color.rgb(142,137,127),false);
+        metadata.setPadding(0,dp(14),0,dp(23));page.addView(metadata);
+        View rule=new View(this);rule.setBackgroundColor(Color.rgb(230,225,214));page.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));
+        bodyView=label(articleText==null||articleText.isEmpty()?"暂时无法提取正文。你可以查看原网页，或使用 RSS 摘要。":articleText,bodyTextSize,Color.rgb(61,58,52),false);
+        bodyView.setPadding(0,dp(24),0,dp(20));bodyView.setTextIsSelectable(true);bodyView.setLineSpacing(dp(8),1.27f);
+        bodyView.setCustomSelectionActionModeCallback(new ActionMode.Callback(){
             @Override public boolean onCreateActionMode(ActionMode mode,Menu menu){menu.add(0,1,1,"加入笔记");menu.add(0,2,2,"询问 AI");return true;}
             @Override public boolean onPrepareActionMode(ActionMode mode,Menu menu){return false;}
             @Override public boolean onActionItemClicked(ActionMode mode,MenuItem item){int a=bodyView.getSelectionStart(),b=bodyView.getSelectionEnd();if(a<0||b<=a)return false;selectedText=bodyView.getText().subSequence(a,b).toString();mode.finish();if(item.getItemId()==1)showNotePicker();else askAi();return true;}
             @Override public void onDestroyActionMode(ActionMode mode){}
         });
-        page.addView(bodyView);scroll.addView(page);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        TextView original=label("打开原网页 ↗",13,Color.rgb(145,105,35),true);original.setPadding(dp(20),dp(13),dp(20),dp(13));original.setOnClickListener(v->{try{startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(article.url)));}catch(Exception ignored){}});root.addView(original);
-        setContentView(root);
+        page.addView(bodyView);
+        TextView sourceNote=label("本文由 Minenote Reader 整理 · 原文内容及版权归原作者所有",10,Color.rgb(157,151,140),false);
+        sourceNote.setPadding(0,dp(20),0,dp(10));page.addView(sourceNote);
+        scroll.addView(page);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        LinearLayout bottom=new LinearLayout(this);bottom.setGravity(android.view.Gravity.CENTER_VERTICAL);bottom.setPadding(dp(16),dp(9),dp(16),dp(9));bottom.setBackgroundColor(Color.WHITE);
+        TextView smaller=bottomAction("A−");smaller.setOnClickListener(v->{bodyTextSize=Math.max(14,bodyTextSize-1);bodyView.setTextSize(bodyTextSize);});
+        TextView bigger=bottomAction("A＋");bigger.setOnClickListener(v->{bodyTextSize=Math.min(26,bodyTextSize+1);bodyView.setTextSize(bodyTextSize);});
+        bottom.addView(smaller);bottom.addView(bigger);
+        TextView spacer=label("原文网页 ↗",13,Color.rgb(142,103,36),true);spacer.setGravity(android.view.Gravity.CENTER);bottom.addView(spacer,new LinearLayout.LayoutParams(0,dp(42),1));
+        spacer.setOnClickListener(v->{try{startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(article.url)));}catch(Exception ignored){}});
+        root.addView(bottom);setContentView(root);
     }
+
+    private TextView bottomAction(String value){TextView t=label(value,15,Color.rgb(83,77,66),true);t.setGravity(android.view.Gravity.CENTER);t.setBackground(roundBg());LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(44),dp(40));p.rightMargin=dp(7);t.setLayoutParams(p);return t;}
+    private android.graphics.drawable.GradientDrawable roundBg(){android.graphics.drawable.GradientDrawable d=new android.graphics.drawable.GradientDrawable();d.setColor(Color.rgb(247,243,234));d.setCornerRadius(dp(13));return d;}
+    private String dateLabel(long time){if(time<=0)return "";return new java.text.SimpleDateFormat("yyyy年M月d日",java.util.Locale.CHINA).format(new java.util.Date(time));}
 
     private void showNotePicker(){
         io.execute(()->{List<Note> notes=db.noteDao().getAllNotes();runOnUiThread(()->{
