@@ -29,6 +29,7 @@ public class ReaderActivity extends AppCompatActivity {
     private AppDatabase db;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private LinearLayout content;
+    private LinearLayout sourceStrip;
     private int filterMode = 0; // 0 all, 1 unread, 2 saved
     private int selectedSourceId = -1;
     private String searchQuery = "";
@@ -86,7 +87,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         HorizontalScrollView sourceScroll=new HorizontalScrollView(this);
         sourceScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout sourceStrip=new LinearLayout(this);sourceStrip.setGravity(Gravity.CENTER_VERTICAL);
+        sourceStrip=new LinearLayout(this);sourceStrip.setGravity(Gravity.CENTER_VERTICAL);
         sourceStrip.setPadding(0,0,0,dp(14));
         sourceStrip.setTag("sourceStrip");
         sourceScroll.addView(sourceStrip);root.addView(sourceScroll);
@@ -135,15 +136,13 @@ public class ReaderActivity extends AppCompatActivity {
 
     private void render(List<ReaderSource> sources,List<ReaderArticle> articles) {
         content.removeAllViews();
-        View stripView=findViewById(android.R.id.content);
-        HorizontalScrollView sourceScroll=findSourceScroll((LinearLayout)((android.view.ViewGroup)stripView).getChildAt(0));
-        if(sourceScroll!=null){
-            LinearLayout strip=(LinearLayout)sourceScroll.getChildAt(0);strip.removeAllViews();
-            TextView all=tab("全部来源",selectedSourceId==-1);strip.addView(all);
+        if(sourceStrip!=null){
+            sourceStrip.removeAllViews();
+            TextView all=tab("全部来源",selectedSourceId==-1);sourceStrip.addView(all);
             all.setOnClickListener(v->{selectedSourceId=-1;reload();});
             for(ReaderSource source:sources){
                 TextView chip=tab(source.title,selectedSourceId==source.id);
-                LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,-2);cp.leftMargin=dp(7);strip.addView(chip,cp);
+                LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,-2);cp.leftMargin=dp(7);sourceStrip.addView(chip,cp);
                 chip.setOnClickListener(v->{selectedSourceId=source.id;reload();});
                 chip.setOnLongClickListener(v->{new AlertDialog.Builder(this).setTitle(source.title)
                         .setItems(new String[]{"刷新订阅","删除订阅"},(d,w)->{if(w==0)refreshSource(source);else new AlertDialog.Builder(this).setMessage("删除订阅源及其文章？").setNegativeButton("取消",null).setPositiveButton("删除",(x,y)->deleteSource(source)).show();}).show();return true;});
@@ -179,10 +178,6 @@ public class ReaderActivity extends AppCompatActivity {
         }
     }
 
-    private HorizontalScrollView findSourceScroll(LinearLayout root){
-        for(int i=0;i<root.getChildCount();i++)if(root.getChildAt(i) instanceof HorizontalScrollView)return (HorizontalScrollView)root.getChildAt(i);
-        return null;
-    }
     private String sourceName(List<ReaderSource> sources,int id){for(ReaderSource s:sources)if(s.id==id)return s.title;return "订阅";}
     private String safe(String s){return s==null?"":s;}
     private String dateLabel(long time){if(time<=0)return "";return new SimpleDateFormat("MM月dd日",Locale.CHINA).format(new Date(time));}
