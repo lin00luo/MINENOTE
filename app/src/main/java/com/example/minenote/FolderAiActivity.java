@@ -17,7 +17,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.room.Room;
 
 import java.util.ArrayList;
-import java.util.List;
+import java.util.List;\nimport java.util.Collections;\nimport java.util.HashSet;\nimport java.util.Set;\nimport java.util.regex.Matcher;\nimport java.util.regex.Pattern;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -33,7 +33,7 @@ public class FolderAiActivity extends AppCompatActivity {
     private int folderId;
     private String folderName;
     private List<Note> folderNotes = new ArrayList<>();
-    private String pendingGeneratedText = "";
+    private String pendingGeneratedText = "";\n    private static final Pattern SOURCE_PATTERN = Pattern.compile("\\\\[来源笔记ID[:：](\\\\d+)\\\\]");
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -136,25 +136,58 @@ public class FolderAiActivity extends AppCompatActivity {
         });
     }
 
-    private String buildFolderContext() {
+    // 按问题关键词在本地笔记中检索相关内容，不会读取其他文件夹。
+    private List<Note> retrieveRelevantNotes(String query, boolean globalTask) {
+        List<Note> ranked = new ArrayList<>(folderNotes);
+        if (globalTask || ranked.size() <= 8) return ranked.subList(0, Math.min(ranked.size(), 30));
+        Set<String> terms = tokenize(query);
+        Collections.sort(ranked, (left, right) ->
+                Integer.compare(noteScore(right, terms), noteScore(left, terms)));
+        List<Note> selected = new ArrayList<>();
+        for (Note note : ranked) {
+            if (selected.size() >= 8) break;
+            if (noteScore(note, terms) > 0) selected.add(note);
+        }
+        if (selected.isEmpty()) {
+            for (int i = 0; i < Math.min(5, ranked.size()); i++) selected.add(ranked.get(i));
+        }
+        return selected;
+    }
+
+    private Set<String> tokenize(String text) {
+        Set<String> terms = new HashSet<>();
+        Matcher matcher = Pattern.compile("[\\\\p{IsHan}]{2,}|[a-zA-Z0-9_]{2,}")
+                .matcher(text == null ? "" : text.toLowerCase());
+        while (matcher.find()) terms.add(matcher.group());
+        return terms;
+    }
+
+    private int noteScore(Note note, Set<String> terms) {
+        String title = note.getTitle() == null ? "" : note.getTitle().toLowerCase();
+        String body = note.getContent() == null ? "" : note.getContent().toLowerCase();
+        int score = 0;
+        for (String term : terms) {
+            if (title.contains(term)) score += 5;
+            if (body.contains(term)) score += 1;
+        }
+        return score;
+    }
+
+    private String buildFolderContext(List<Note> selected) {
         StringBuilder context = new StringBuilder();
-        int count = Math.min(folderNotes.size(), 30);
-        for (int i = 0; i < count; i++) {
-            Note n = folderNotes.get(i);
+        for (Note n : selected) {
             String title = n.getTitle() == null || n.getTitle().trim().isEmpty()
                     ? "未命名笔记" : n.getTitle().trim();
             String body = n.getContent() == null ? "" : n.getContent();
-            if (body.length() > 2400) body = body.substring(0, 2400) + "……[内容截断]";
-            context.append("\n\n【来源笔记ID:").append(n.getId()).append("｜")
-                    .append(title).append("】\n").append(body);
-            if (context.length() > 42000) {
-                context.append("\n[上下文达到长度限制，后续笔记未载入]");
+            body = InlineImages.MARKER.matcher(body).replaceAll("[图片]");
+            if (body.length() > 3000) body = body.substring(0, 3000) + "……[内容截断]";
+            context.append("\\n\\n【来源笔记ID:").append(n.getId()).append("】")
+                    .append("【标题:").append(title).append("】\\n").append(body);
+            if (context.length() > 36000) {
+                context.append("\\n[上下文达到长度限制，后续笔记未载入]");
                 break;
             }
         }
-        if (folderNotes.size() > count) context.append("\n[提示：文件夹共有 ")
-                .append(folderNotes.size()).append(" 篇笔记，本次上下文最多载入前 ")
-                .append(count).append(" 篇。]");
         return context.toString();
     }
 
@@ -165,15 +198,20 @@ public class FolderAiActivity extends AppCompatActivity {
         }
         addMessage("user", question);
         addMessage("system", "正在结合文件夹笔记思考……");
-        String context = buildFolderContext();
+        boolean globalTask = question.contains("总结") || question.contains("全部")
+                || question.contains("关联") || question.contains("比较") || question.contains("知识脉络");
+        List<Note> selected = retrieveRelevantNotes(question, globalTask);
+        String context = buildFolderContext(selected);
         String task = "你是 Minenote 的文件夹知识助手。当前文件夹名称：" + folderName
-                + "。请严格依据下面提供的本文件夹笔记回答。不要把推测说成笔记事实；资料不足时明确说明。"
-                + "引用来源时保留来源笔记标题和ID。若用户要求生成笔记，请输出清晰的标题和正文，但不要声称已经保存。"
-                + "\n\n用户任务：" + question + "\n\n文件夹笔记资料：" + context;
+                + "。只能依据下列本文件夹笔记回答；资料不足时明确说明，不得编造。"
+                + "凡引用笔记内容，必须在相关段落末尾标注精确格式 [来源笔记ID:数字]，数字必须来自资料。"
+                + "生成笔记时也请列出来源ID，但不要声称已保存。"
+                + "\\n本次检索到 " + selected.size() + " 篇笔记，当前文件夹共 " + folderNotes.size() + " 篇。"
+                + "\\n用户任务：" + question + "\\n文件夹资料：" + context;
         new AIClient(this).analyzeNote(task, "自定义提问", new AIClient.Callback() {
             @Override public void onSuccess(String result) {
                 runOnUiThread(() -> {
-                    addMessage("assistant", result);
+                    addMessage("assistant", result);\n                    addSourceLinks(result);
                     if (question.contains("生成") || question.contains("新笔记")) {
                         pendingGeneratedText = result;
                         showSaveGeneratedDialog(result);
@@ -184,6 +222,35 @@ public class FolderAiActivity extends AppCompatActivity {
                 runOnUiThread(() -> addMessage("error", error));
             }
         });
+    }
+
+    // 将 AI 返回的来源笔记ID转换为可点击的笔记入口。
+    private void addSourceLinks(String answer) {
+        Matcher matcher = SOURCE_PATTERN.matcher(answer);
+        Set<Integer> ids = new HashSet<>();
+        while (matcher.find()) {
+            try { ids.add(Integer.parseInt(matcher.group(1))); }
+            catch (NumberFormatException ignored) { }
+        }
+        for (Integer id : ids) {
+            Note source = null;
+            for (Note note : folderNotes) if (note.getId() == id) { source = note; break; }
+            if (source == null) continue;
+            final int noteId = id;
+            TextView link = new TextView(this);
+            link.setText("📄 " + (source.getTitle() == null ? "未命名笔记" : source.getTitle()) + "  ›");
+            link.setTextColor(Color.rgb(130, 100, 35));
+            link.setTextSize(14);
+            link.setPadding(dp(12), dp(8), dp(12), dp(8));
+            link.setOnClickListener(v -> {
+                Intent intent = new Intent(FolderAiActivity.this, NoteDetailActivity.class);
+                intent.putExtra("note_id", noteId);
+                startActivity(intent);
+            });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+            params.topMargin = dp(3);
+            messages.addView(link, params);
+        }
     }
 
     private void showSaveGeneratedDialog(String content) {
