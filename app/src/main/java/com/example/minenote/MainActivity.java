@@ -271,6 +271,17 @@ public class MainActivity extends AppCompatActivity {
                         )
                 );
 
+        findViewById(R.id.btnFolderAi).setOnClickListener(v -> {
+            if (selectedMenuId <= 0) {
+                Toast.makeText(this, "请先打开一个具体文件夹", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Intent aiIntent = new Intent(MainActivity.this, FolderAiActivity.class);
+            aiIntent.putExtra("folder_id", selectedMenuId);
+            aiIntent.putExtra("folder_name", notesTitle.getText().toString());
+            startActivity(aiIntent);
+        });
+
         findViewById(R.id.btnSearch)
                 .setOnClickListener(v -> {
 
