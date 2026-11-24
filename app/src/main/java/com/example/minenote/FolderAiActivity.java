@@ -17,7 +17,12 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.room.Room;
 
 import java.util.ArrayList;
-import java.util.List;\nimport java.util.Collections;\nimport java.util.HashSet;\nimport java.util.Set;\nimport java.util.regex.Matcher;\nimport java.util.regex.Pattern;
+import java.util.List;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -33,7 +38,8 @@ public class FolderAiActivity extends AppCompatActivity {
     private int folderId;
     private String folderName;
     private List<Note> folderNotes = new ArrayList<>();
-    private String pendingGeneratedText = "";\n    private static final Pattern SOURCE_PATTERN = Pattern.compile("\\[来源笔记ID[:：](\\d+)\\]");
+    private String pendingGeneratedText = "";
+    private static final Pattern SOURCE_PATTERN = Pattern.compile("\\[来源笔记ID[:：](\\d+)\\]");
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -181,10 +187,10 @@ public class FolderAiActivity extends AppCompatActivity {
             String body = n.getContent() == null ? "" : n.getContent();
             body = InlineImages.MARKER.matcher(body).replaceAll("[图片]");
             if (body.length() > 3000) body = body.substring(0, 3000) + "……[内容截断]";
-            context.append("\\n\\n【来源笔记ID:").append(n.getId()).append("】")
-                    .append("【标题:").append(title).append("】\\n").append(body);
+            context.append("\n\\n【来源笔记ID:").append(n.getId()).append("】")
+                    .append("【标题:").append(title).append("】\n").append(body);
             if (context.length() > 36000) {
-                context.append("\\n[上下文达到长度限制，后续笔记未载入]");
+                context.append("\n[上下文达到长度限制，后续笔记未载入]");
                 break;
             }
         }
@@ -206,12 +212,13 @@ public class FolderAiActivity extends AppCompatActivity {
                 + "。只能依据下列本文件夹笔记回答；资料不足时明确说明，不得编造。"
                 + "凡引用笔记内容，必须在相关段落末尾标注精确格式 [来源笔记ID:数字]，数字必须来自资料。"
                 + "生成笔记时也请列出来源ID，但不要声称已保存。"
-                + "\\n本次检索到 " + selected.size() + " 篇笔记，当前文件夹共 " + folderNotes.size() + " 篇。"
-                + "\\n用户任务：" + question + "\\n文件夹资料：" + context;
+                + "\n本次检索到 " + selected.size() + " 篇笔记，当前文件夹共 " + folderNotes.size() + " 篇。"
+                + "\n用户任务：" + question + "\n文件夹资料：" + context;
         new AIClient(this).analyzeNote(task, "自定义提问", new AIClient.Callback() {
             @Override public void onSuccess(String result) {
                 runOnUiThread(() -> {
-                    addMessage("assistant", result);\n                    addSourceLinks(result);
+                    addMessage("assistant", result);
+                    addSourceLinks(result);
                     if (question.contains("生成") || question.contains("新笔记")) {
                         pendingGeneratedText = result;
                         showSaveGeneratedDialog(result);
