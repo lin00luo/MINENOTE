@@ -74,7 +74,8 @@ public class FolderAiActivity extends AppCompatActivity {
         back.setText("‹");
         back.setTextSize(34);
         back.setTextColor(Color.rgb(50, 50, 50));
-        back.setPadding(dp(4), 0, dp(16), 0);\n        back.setBackground(roundedBackground(Color.rgb(255, 255, 255), 14, 0));
+        back.setPadding(dp(4), 0, dp(16), 0);
+        back.setBackground(roundedBackground(Color.rgb(255, 255, 255), 14, 0));
         back.setOnClickListener(v -> finish());
         header.addView(back);
         LinearLayout titles = new LinearLayout(this);
@@ -111,10 +112,16 @@ public class FolderAiActivity extends AppCompatActivity {
         questionInput.setSingleLine(false);
         questionInput.setMinLines(2);
         questionInput.setMaxLines(4);
-        questionInput.setHint("询问这个文件夹里的任何问题……");\n        questionInput.setTextSize(15);\n        questionInput.setPadding(dp(16), dp(12), dp(16), dp(12));\n        questionInput.setBackground(roundedBackground(Color.WHITE, 24, Color.rgb(235, 226, 207)));
+        questionInput.setHint("询问这个文件夹里的任何问题……");
+        questionInput.setTextSize(15);
+        questionInput.setPadding(dp(16), dp(12), dp(16), dp(12));
+        questionInput.setBackground(roundedBackground(Color.WHITE, 24, Color.rgb(235, 226, 207)));
         root.addView(questionInput, new LinearLayout.LayoutParams(-1, -2));
         Button send = new Button(this);
-        send.setText("发送");\n        send.setTextColor(Color.rgb(91, 67, 25));\n        send.setAllCaps(false);\n        send.setBackground(roundedBackground(Color.rgb(244, 224, 174), 18, 0));
+        send.setText("发送");
+        send.setTextColor(Color.rgb(91, 67, 25));
+        send.setAllCaps(false);
+        send.setBackground(roundedBackground(Color.rgb(244, 224, 174), 18, 0));
         send.setOnClickListener(v -> {
             String q = questionInput.getText().toString().trim();
             if (!q.isEmpty()) {
@@ -129,7 +136,11 @@ public class FolderAiActivity extends AppCompatActivity {
     private void addAction(LinearLayout row, String label, String prompt) {
         Button b = new Button(this);
         b.setText(label);
-        b.setTextSize(12);\n        b.setAllCaps(false);\n        b.setTextColor(Color.rgb(93, 73, 39));\n        b.setBackground(roundedBackground(Color.rgb(246, 239, 222), 16, 0));\n        b.setElevation(0);
+        b.setTextSize(12);
+        b.setAllCaps(false);
+        b.setTextColor(Color.rgb(93, 73, 39));
+        b.setBackground(roundedBackground(Color.rgb(246, 239, 222), 16, 0));
+        b.setElevation(0);
         b.setOnClickListener(v -> ask(prompt));
         row.addView(b, new LinearLayout.LayoutParams(0, dp(48), 1));
     }
@@ -269,7 +280,8 @@ public class FolderAiActivity extends AppCompatActivity {
             link.setText("📄 " + (source.getTitle() == null ? "未命名笔记" : source.getTitle()) + "  ›");
             link.setTextColor(Color.rgb(130, 100, 35));
             link.setTextSize(14);
-            link.setPadding(dp(12), dp(8), dp(12), dp(8));\n            link.setBackground(roundedBackground(Color.rgb(247, 239, 219), 14, 0));
+            link.setPadding(dp(12), dp(8), dp(12), dp(8));
+            link.setBackground(roundedBackground(Color.rgb(247, 239, 219), 14, 0));
             link.setOnClickListener(v -> {
                 Intent intent = new Intent(FolderAiActivity.this, NoteDetailActivity.class);
                 intent.putExtra("note_id", noteId);
@@ -327,7 +339,8 @@ public class FolderAiActivity extends AppCompatActivity {
         bg.setColor(role.equals("user") ? Color.rgb(185, 145, 55)
                 : role.equals("error") ? Color.rgb(255, 230, 230)
                 : role.equals("system") ? Color.rgb(240, 240, 240) : Color.WHITE);
-        bubble.setBackground(bg);\n        bubble.setElevation(dp(1));
+        bubble.setBackground(bg);
+        bubble.setElevation(dp(1));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 role.equals("user") ? (int)(getResources().getDisplayMetrics().widthPixels * .78) : -1, -2);
         lp.topMargin = dp(8);
