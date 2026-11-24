@@ -39,6 +39,8 @@ public class FolderAiActivity extends AppCompatActivity {
     private String folderName;
     private List<Note> folderNotes = new ArrayList<>();
     private String pendingGeneratedText = "";
+    // Recent turns are kept in memory only and are scoped to this folder screen.
+    private final List<String> conversationHistory = new ArrayList<>();
     private static final Pattern SOURCE_PATTERN = Pattern.compile("\\[来源笔记ID[:：](\\d+)\\]");
 
     @Override protected void onCreate(Bundle state) {
@@ -187,7 +189,7 @@ public class FolderAiActivity extends AppCompatActivity {
             String body = n.getContent() == null ? "" : n.getContent();
             body = InlineImages.MARKER.matcher(body).replaceAll("[图片]");
             if (body.length() > 3000) body = body.substring(0, 3000) + "……[内容截断]";
-            context.append("\n\\n【来源笔记ID:").append(n.getId()).append("】")
+            context.append("\n\n【来源笔记ID:").append(n.getId()).append("】")
                     .append("【标题:").append(title).append("】\n").append(body);
             if (context.length() > 36000) {
                 context.append("\n[上下文达到长度限制，后续笔记未载入]");
@@ -203,6 +205,7 @@ public class FolderAiActivity extends AppCompatActivity {
             return;
         }
         addMessage("user", question);
+        rememberTurn("用户", question);
         addMessage("system", "正在结合文件夹笔记思考……");
         boolean globalTask = question.contains("总结") || question.contains("全部")
                 || question.contains("关联") || question.contains("比较") || question.contains("知识脉络");
@@ -213,11 +216,13 @@ public class FolderAiActivity extends AppCompatActivity {
                 + "凡引用笔记内容，必须在相关段落末尾标注精确格式 [来源笔记ID:数字]，数字必须来自资料。"
                 + "生成笔记时也请列出来源ID，但不要声称已保存。"
                 + "\n本次检索到 " + selected.size() + " 篇笔记，当前文件夹共 " + folderNotes.size() + " 篇。"
-                + "\n用户任务：" + question + "\n文件夹资料：" + context;
+                + "\\n最近对话（仅用于理解上下文，最多保留最近6条消息）：\\n" + buildConversationContext()
+                + "\\n当前用户问题：" + question + "\\n文件夹资料：" + context;
         new AIClient(this).analyzeNote(task, "自定义提问", new AIClient.Callback() {
             @Override public void onSuccess(String result) {
                 runOnUiThread(() -> {
                     addMessage("assistant", result);
+                    rememberTurn("助手", result);
                     addSourceLinks(result);
                     if (question.contains("生成") || question.contains("新笔记")) {
                         pendingGeneratedText = result;
@@ -229,6 +234,22 @@ public class FolderAiActivity extends AppCompatActivity {
                 runOnUiThread(() -> addMessage("error", error));
             }
         });
+    }
+
+    private String buildConversationContext() {
+        StringBuilder history = new StringBuilder();
+        int start = Math.max(0, conversationHistory.size() - 6);
+        for (int i = start; i < conversationHistory.size(); i++) {
+            history.append(conversationHistory.get(i)).append("\\n");
+        }
+        return history.length() == 0 ? "（暂无历史对话）" : history.toString();
+    }
+
+    private void rememberTurn(String role, String content) {
+        String safe = content == null ? "" : content;
+        if (safe.length() > 1800) safe = safe.substring(0, 1800) + "……";
+        conversationHistory.add(role + "：" + safe);
+        while (conversationHistory.size() > 6) conversationHistory.remove(0);
     }
 
     // 将 AI 返回的来源笔记ID转换为可点击的笔记入口。
