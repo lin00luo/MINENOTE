@@ -86,7 +86,8 @@ public class MainActivity extends AppCompatActivity {
                 AppDatabaseMigration.MIGRATION_1_2,
                 AppDatabaseMigrationV3.MIGRATION_2_3,
                 AppDatabaseMigrationV4.MIGRATION_3_4,
-                AppDatabaseMigrationV5.MIGRATION_4_5
+                AppDatabaseMigrationV5.MIGRATION_4_5,
+                ReaderDatabaseMigrationV6.MIGRATION_5_6
         ).build();
 
         setupNotes();
@@ -334,6 +335,11 @@ public class MainActivity extends AppCompatActivity {
                 .setOnClickListener(v ->
                         showCreateFolderDialog()
                 );
+
+        findViewById(R.id.menuReader).setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, ReaderActivity.class));
+            drawerLayout.closeDrawer(Gravity.START);
+        });
 
         findViewById(R.id.menuSettings)
                 .setOnClickListener(v -> {
