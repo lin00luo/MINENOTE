@@ -234,20 +234,30 @@ public class ReaderArticleActivity extends AppCompatActivity {
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0 MinenoteReader/1.0");
                 connection.connect();
                 if (connection.getResponseCode() >= 200 && connection.getResponseCode() < 300) {
+                    java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+                    try (java.io.InputStream input = connection.getInputStream()) {
+                        byte[] buffer = new byte[8192];
+                        int count;
+                        int total = 0;
+                        while ((count = input.read(buffer)) != -1 && total < 8 * 1024 * 1024) {
+                            output.write(buffer, 0, count);
+                            total += count;
+                        }
+                    }
+                    byte[] bytes = output.toByteArray();
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inJustDecodeBounds = true;
-                    BitmapFactory.decodeStream(connection.getInputStream(), null, options);
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
                     int sample = 1;
                     while (options.outWidth / sample > width * 2) sample *= 2;
                     options.inJustDecodeBounds = false;
                     options.inSampleSize = sample;
-                    Bitmap bitmap = BitmapFactory.decodeStream(connection.getInputStream(), null, options);
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
                     if (bitmap != null) runOnUiThread(() -> {
                         drawable.setBitmap(bitmap);
                         if (bodyView != null) bodyView.invalidate();
                     });
-                }
-            } catch (Exception ignored) {
+                }            } catch (Exception ignored) {
             } finally {
                 if (connection != null) connection.disconnect();
             }
