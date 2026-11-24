@@ -70,7 +70,7 @@ public final class ReaderFetcher {
             try { a.url = normalizeHttpUrl(a.url); } catch (Exception badUrl) { continue; }
             if (a.guid.isEmpty()) a.guid = a.url;
             a.author = text(entry, "author name");
-            if (a.author.isEmpty()) a.author = text(entry, "dc|creator");
+            if (a.author.isEmpty()) a.author = childText(entry, "dc:creator");
             a.summary = text(entry, "description");
             if (a.summary.isEmpty()) a.summary = text(entry, "summary");
             a.content = childText(entry, "content:encoded");
