@@ -25,6 +25,7 @@
         </provider>
 
         <activity android:name=".OcrActivity" android:exported="false" />
+        <activity android:name=".FolderAiActivity" android:exported="false" />
         <activity android:name=".CaptureActivity" android:exported="false" />
 
         <service
