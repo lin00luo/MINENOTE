@@ -35,7 +35,8 @@ public class EditNoteActivity extends AppCompatActivity {
                 getApplicationContext(),
                 AppDatabase.class,
                 "minenote_database"
-        ).addMigrations(AppDatabaseMigration.MIGRATION_1_2, AppDatabaseMigrationV3.MIGRATION_2_3, AppDatabaseMigrationV4.MIGRATION_3_4, AppDatabaseMigrationV5.MIGRATION_4_5)
+        ).addMigrations(AppDatabaseMigration.MIGRATION_1_2, AppDatabaseMigrationV3.MIGRATION_2_3, AppDatabaseMigrationV4.MIGRATION_3_4, AppDatabaseMigrationV5.MIGRATION_4_5,
+                        ReaderDatabaseMigrationV6.MIGRATION_5_6)
                 .build();
 
         // 找到输入框
