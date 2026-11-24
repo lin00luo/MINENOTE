@@ -257,7 +257,8 @@ public class ReaderArticleActivity extends AppCompatActivity {
                         drawable.setBitmap(bitmap);
                         if (bodyView != null) bodyView.invalidate();
                     });
-                }            } catch (Exception ignored) {
+                }
+            } catch (Exception ignored) {
             } finally {
                 if (connection != null) connection.disconnect();
             }
