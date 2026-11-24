@@ -33,7 +33,7 @@ public class FolderAiActivity extends AppCompatActivity {
     private int folderId;
     private String folderName;
     private List<Note> folderNotes = new ArrayList<>();
-    private String pendingGeneratedText = "";\n    private static final Pattern SOURCE_PATTERN = Pattern.compile("\\\\[来源笔记ID[:：](\\\\d+)\\\\]");
+    private String pendingGeneratedText = "";\n    private static final Pattern SOURCE_PATTERN = Pattern.compile("\\[来源笔记ID[:：](\\d+)\\]");
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -156,7 +156,7 @@ public class FolderAiActivity extends AppCompatActivity {
 
     private Set<String> tokenize(String text) {
         Set<String> terms = new HashSet<>();
-        Matcher matcher = Pattern.compile("[\\\\p{IsHan}]{2,}|[a-zA-Z0-9_]{2,}")
+        Matcher matcher = Pattern.compile("[\\p{IsHan}]{2,}|[a-zA-Z0-9_]{2,}")
                 .matcher(text == null ? "" : text.toLowerCase());
         while (matcher.find()) terms.add(matcher.group());
         return terms;
