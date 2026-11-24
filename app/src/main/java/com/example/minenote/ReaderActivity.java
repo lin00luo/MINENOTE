@@ -131,8 +131,15 @@ public class ReaderActivity extends AppCompatActivity {
                 String url=ReaderFetcher.normalizeHttpUrl(raw);
                 String feed;
                 List<ReaderFetcher.ParsedArticle> parsed;
-                try { parsed=ReaderFetcher.fetchFeed(url); feed=url; }
-                catch(Exception notFeed) { feed=ReaderFetcher.discoverFeed(url); parsed=ReaderFetcher.fetchFeed(feed); }
+                try {
+                    parsed=ReaderFetcher.fetchFeed(url);
+                    if(parsed.isEmpty()) throw new IllegalArgumentException("该地址不是可识别的 RSS / Atom 源");
+                    feed=url;
+                } catch(Exception notFeed) {
+                    feed=ReaderFetcher.discoverFeed(url);
+                    parsed=ReaderFetcher.fetchFeed(feed);
+                    if(parsed.isEmpty()) throw new IllegalArgumentException("已找到订阅地址，但没有解析到文章");
+                }
                 final String feedUrl=feed;
                 String title=raw;
                 try { org.jsoup.nodes.Document doc=org.jsoup.Jsoup.connect(url).timeout(8000).get(); if(!doc.title().isEmpty()) title=doc.title(); } catch(Exception ignored) {}
