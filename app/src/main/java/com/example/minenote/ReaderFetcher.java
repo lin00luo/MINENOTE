@@ -179,15 +179,22 @@ public final class ReaderFetcher {
         return sanitizeArticleHtml(fragment.body(), baseUri);
     }
 
-    private static String firstHtml(Element parent, String... selectors) {
-        for (String selector : selectors) {
-            Element element = parent.selectFirst(selector);
-            if (element == null) continue;
-            String html = element.html().trim();
-            if (!html.isEmpty()) return html;
-            String value = element.text().trim();
-            if (!value.isEmpty()) {
-                return "<p>" + org.jsoup.nodes.Entities.escape(value) + "</p>";
+    /**
+     * Read namespaced RSS/Atom elements by their literal XML tag name.
+     * A colon in "content:encoded" is part of the tag name, not a CSS pseudo-class.
+     */
+    private static String firstHtml(Element parent, String... tagNames) {
+        for (String tagName : tagNames) {
+            for (Element element : parent.children()) {
+                if (!element.tagName().equalsIgnoreCase(tagName)) continue;
+
+                String html = element.html().trim();
+                if (!html.isEmpty()) return html;
+
+                String value = element.text().trim();
+                if (!value.isEmpty()) {
+                    return "<p>" + org.jsoup.nodes.Entities.escape(value) + "</p>";
+                }
             }
         }
         return "";
