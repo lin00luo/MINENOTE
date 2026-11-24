@@ -3,6 +3,7 @@ package com.example.minenote;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
 import org.jsoup.parser.Parser;
 import org.jsoup.select.Elements;
 import java.net.URI;
@@ -47,7 +48,8 @@ public final class ReaderFetcher {
             try {
                 Document test = Jsoup.connect(probe).userAgent("MinenoteReader/1.0")
                         .ignoreContentType(true).timeout(5000).get();
-                if (test.outerHtml().contains("<rss") || test.outerHtml().contains("<feed")) return probe;
+                String xml = test.outerHtml().toLowerCase(java.util.Locale.ROOT);
+                if (xml.contains("<rss") || xml.contains("<feed")) return probe;
             } catch (Exception ignored) { }
         }
         throw new IllegalArgumentException("没有找到 RSS / Atom 订阅源。可以直接粘贴 RSS 地址重试。");
@@ -65,16 +67,15 @@ public final class ReaderFetcher {
             a.guid = text(entry, "guid");
             if (a.guid.isEmpty()) a.guid = text(entry, "id");
             Element link = entry.selectFirst("link[rel=alternate], link[href]");
-            a.url = link == null ? text(entry, "link") : (link.hasAttr("href") ? link.absUrl("href") : link.text());
+            a.url = link == null ? text(entry, "link")
+                    : (link.hasAttr("href") ? link.absUrl("href") : link.text());
             if (a.url.isEmpty()) a.url = a.guid;
             try { a.url = normalizeHttpUrl(a.url); } catch (Exception badUrl) { continue; }
             if (a.guid.isEmpty()) a.guid = a.url;
             a.author = text(entry, "author name");
             if (a.author.isEmpty()) a.author = childText(entry, "dc:creator");
-            a.summary = text(entry, "description");
-            if (a.summary.isEmpty()) a.summary = text(entry, "summary");
-            a.content = childText(entry, "content:encoded");
-            if (a.content.isEmpty()) a.content = text(entry, "content");
+            a.summary = firstHtml(entry, "description", "summary");
+            a.content = firstHtml(entry, "content:encoded", "content");
             if (a.content.isEmpty()) a.content = a.summary;
             a.publishedAt = System.currentTimeMillis();
             if (!a.title.isEmpty()) result.add(a);
@@ -82,29 +83,121 @@ public final class ReaderFetcher {
         return result;
     }
 
+    /**
+     * Returns sanitized article HTML, not flattened text. Keeping the markup here is
+     * important: the native reader needs paragraph, heading, list and image boundaries.
+     */
     public static String extractArticle(String articleUrl, String fallback) {
         try {
             String url = normalizeHttpUrl(articleUrl);
-            Document doc = Jsoup.connect(url).userAgent("Mozilla/5.0 (compatible; MinenoteReader/1.0)")
+            Document doc = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (compatible; MinenoteReader/1.0)")
                     .timeout(15000).followRedirects(true).get();
-            doc.select("script,style,noscript,nav,footer,header,aside,form,iframe").remove();
-            Element article = doc.selectFirst("article");
-            if (article == null) article = doc.selectFirst("main");
-            if (article == null) article = doc.body();
-            String text = article == null ? "" : article.text();
-            return text.length() >= 80 ? text : cleanFallback(fallback == null ? text : fallback);
-        } catch (Exception e) {
-            return cleanFallback(fallback);
+            Element article = findArticleContainer(doc);
+            if (article != null && article.text().trim().length() >= 80) {
+                return sanitizeArticleHtml(article, doc.baseUri());
+            }
+        } catch (Exception ignored) {
+            // RSS content is still useful when the publisher blocks direct page fetching.
         }
+        return cleanFallback(fallback);
     }
 
-    /** Convert RSS HTML fragments to readable plain text so tags never leak into the UI. */
+    private static Element findArticleContainer(Document doc) {
+        doc.select("script,style,noscript,nav,footer,header,aside,form,iframe,button,svg").remove();
+        String[] selectors = {
+                "article", "[itemprop=articleBody]", "main",
+                ".post-content", ".entry-content", ".article-content",
+                ".article-body", ".post-body", "#article-content"
+        };
+        Element best = null;
+        int bestScore = 0;
+        for (String selector : selectors) {
+            for (Element candidate : doc.select(selector)) {
+                int textLength = candidate.text().trim().length();
+                if (textLength < 80) continue;
+                int paragraphs = candidate.select("p").size();
+                int images = candidate.select("img").size();
+                int score = textLength + paragraphs * 120 + images * 80;
+                if (score > bestScore) {
+                    best = candidate;
+                    bestScore = score;
+                }
+            }
+        }
+        if (best == null && doc.body() != null && doc.body().text().trim().length() >= 80) {
+            best = doc.body();
+        }
+        return best;
+    }
+
+    private static String sanitizeArticleHtml(Element container, String baseUri) {
+        Document fragment = Jsoup.parseBodyFragment(container.html(), baseUri);
+        fragment.outputSettings().prettyPrint(false);
+        fragment.select("script,style,noscript,iframe,form,button,nav,footer,header,aside,svg").remove();
+
+        for (Element element : fragment.getAllElements()) {
+            // Remove active content and presentation styles while preserving semantic tags.
+            List<Node> attributesToRemove = new ArrayList<>();
+            for (org.jsoup.nodes.Attribute attribute : element.attributes()) {
+                String key = attribute.getKey().toLowerCase(java.util.Locale.ROOT);
+                if (key.startsWith("on") || key.equals("style") || key.equals("srcdoc")) {
+                    attributesToRemove.add(element);
+                    break;
+                }
+            }
+            if (!attributesToRemove.isEmpty()) {
+                element.removeAttr("style");
+                List<String> names = new ArrayList<>();
+                for (org.jsoup.nodes.Attribute attribute : element.attributes()) {
+                    String key = attribute.getKey().toLowerCase(java.util.Locale.ROOT);
+                    if (key.startsWith("on") || key.equals("srcdoc")) names.add(attribute.getKey());
+                }
+                for (String name : names) element.removeAttr(name);
+            }
+            if (element.normalName().equals("img")) {
+                if (!element.hasAttr("src") || element.attr("src").trim().isEmpty()) {
+                    String lazy = element.hasAttr("data-src") ? element.attr("data-src")
+                            : element.attr("data-original");
+                    if (!lazy.isEmpty()) element.attr("src", lazy);
+                }
+                String imageUrl = element.absUrl("src");
+                if (!imageUrl.isEmpty()) element.attr("src", imageUrl);
+                element.removeAttr("srcset");
+                element.attr("alt", element.attr("alt"));
+            } else if (element.normalName().equals("a")) {
+                String href = element.absUrl("href");
+                if (!href.isEmpty()) element.attr("href", href);
+                element.removeAttr("target");
+            }
+        }
+        return fragment.body().html().trim();
+    }
+
+    /** Normalize RSS HTML, including feeds that double-escape their markup. */
     private static String cleanFallback(String html) {
         if (html == null || html.trim().isEmpty()) return "";
         Document fragment = Jsoup.parseBodyFragment(html);
         fragment.select("script,style,noscript,iframe").remove();
-        return fragment.body().text().replaceAll("\\u00a0", " ")
-                .replaceAll("[\\t ]+", " ").trim();
+
+        String visible = fragment.body().text();
+        if (visible.matches("(?is).*&lt;\\s*/?\\s*(p|div|h[1-6]|li|blockquote|img)\\b.*")) {
+            fragment = Jsoup.parseBodyFragment(org.jsoup.parser.Parser.unescapeEntities(visible, false));
+            fragment.select("script,style,noscript,iframe").remove();
+        }
+        return sanitizeArticleHtml(fragment.body(), "");
+    }
+
+    private static String firstHtml(Element parent, String... selectors) {
+        for (String selector : selectors) {
+            Element element = parent.selectFirst(selector);
+            if (element == null) continue;
+            String html = element.html().trim();
+            if (!html.isEmpty()) return html;
+            String value = element.text().trim();
+            if (!value.isEmpty()) return "<p>" + org.jsoup.nodes.Entities.escape(value) + "</p>";
+        }
+        return "";
     }
 
     private static String childText(Element parent, String tag) {
