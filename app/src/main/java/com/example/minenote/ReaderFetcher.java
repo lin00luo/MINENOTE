@@ -3,6 +3,7 @@ package com.example.minenote;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
 import org.jsoup.select.Elements;
 import java.net.URI;
 import java.util.ArrayList;
@@ -30,7 +31,7 @@ public final class ReaderFetcher {
     public static String discoverFeed(String websiteUrl) throws Exception {
         String url = normalizeHttpUrl(websiteUrl);
         Document doc = Jsoup.connect(url).userAgent("MinenoteReader/1.0")
-                .timeout(12000).followRedirects(true).get();
+                .timeout(12000).followRedirects(true).parser(Parser.xmlParser()).get();
         Elements links = doc.select("link[rel~=(?i)alternate][type]");
         for (Element link : links) {
             String type = link.attr("type").toLowerCase();
@@ -55,7 +56,7 @@ public final class ReaderFetcher {
     public static List<ParsedArticle> fetchFeed(String feedUrl) throws Exception {
         String url = normalizeHttpUrl(feedUrl);
         Document doc = Jsoup.connect(url).userAgent("MinenoteReader/1.0")
-                .ignoreContentType(true).timeout(15000).get();
+                .ignoreContentType(true).timeout(15000).parser(Parser.xmlParser()).get();
         List<ParsedArticle> result = new ArrayList<>();
         Elements entries = doc.select("item, entry");
         for (Element entry : entries) {
@@ -72,7 +73,7 @@ public final class ReaderFetcher {
             if (a.author.isEmpty()) a.author = text(entry, "dc|creator");
             a.summary = text(entry, "description");
             if (a.summary.isEmpty()) a.summary = text(entry, "summary");
-            a.content = text(entry, "content|encoded");
+            a.content = childText(entry, "content:encoded");
             if (a.content.isEmpty()) a.content = text(entry, "content");
             if (a.content.isEmpty()) a.content = a.summary;
             a.publishedAt = System.currentTimeMillis();
@@ -95,6 +96,13 @@ public final class ReaderFetcher {
         } catch (Exception e) {
             return fallback == null ? "" : fallback;
         }
+    }
+
+    private static String childText(Element parent, String tag) {
+        for (Element child : parent.children()) {
+            if (child.tagName().equalsIgnoreCase(tag)) return child.text().trim();
+        }
+        return "";
     }
 
     private static String text(Element parent, String selector) {
