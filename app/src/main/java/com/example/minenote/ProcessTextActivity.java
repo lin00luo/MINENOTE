@@ -55,7 +55,8 @@ public class ProcessTextActivity extends AppCompatActivity {
                         AppDatabaseMigration.MIGRATION_1_2,
                         AppDatabaseMigrationV3.MIGRATION_2_3,
                         AppDatabaseMigrationV4.MIGRATION_3_4,
-                        AppDatabaseMigrationV5.MIGRATION_4_5)
+                        AppDatabaseMigrationV5.MIGRATION_4_5,
+                        ReaderDatabaseMigrationV6.MIGRATION_5_6)
                 .build();
 
         createPage();
