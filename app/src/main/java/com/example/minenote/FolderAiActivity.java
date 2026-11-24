@@ -130,9 +130,7 @@ public class FolderAiActivity extends AppCompatActivity {
         io.execute(() -> {
             folderNotes = database.noteDao().getNotesByFolder(folderId);
             runOnUiThread(() -> {
-                TextView subtitle = (TextView)((LinearLayout)((LinearLayout)findViewById(android.R.id.content))
-                        .getChildAt(0)).getChildAt(0);
-                // The note count is also shown in the conversation for clarity.
+                // The note count is shown in the conversation for clarity.
                 addMessage("system", "已读取 " + folderNotes.size() + " 篇本文件夹笔记。回答仅使用这些笔记作为资料来源。");
             });
         });
