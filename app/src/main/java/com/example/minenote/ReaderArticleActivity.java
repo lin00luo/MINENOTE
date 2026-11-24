@@ -51,6 +51,13 @@ public class ReaderArticleActivity extends AppCompatActivity {
 
     private void render(String articleText) {
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(248,247,242));
+        if(android.os.Build.VERSION.SDK_INT>=30){
+            root.setOnApplyWindowInsetsListener((v,insets)->{
+                android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());
+                v.setPadding(0,bars.top,0,bars.bottom);
+                return insets;
+            });
+        }
         LinearLayout bar=new LinearLayout(this);bar.setGravity(android.view.Gravity.CENTER_VERTICAL);bar.setPadding(dp(16),dp(9),dp(16),dp(9));
         TextView back=label("‹",30,Color.rgb(55,52,46),false);back.setGravity(android.view.Gravity.CENTER);bar.addView(back,new LinearLayout.LayoutParams(dp(40),dp(42)));back.setOnClickListener(v->finish());
         LinearLayout barTitle=new LinearLayout(this);barTitle.setOrientation(LinearLayout.VERTICAL);
@@ -63,7 +70,7 @@ public class ReaderArticleActivity extends AppCompatActivity {
 
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setClipToPadding(false);
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(dp(23),dp(24),dp(23),dp(34));
-        TextView sourceLabel=label(sourceInfo==null?"MINENOTE READER":sourceInfo.title.toUpperCase(java.util.Locale.ROOT),11,Color.rgb(153,119,58),true);
+        TextView sourceLabel=label(sourceDisplayName().toUpperCase(java.util.Locale.ROOT),11,Color.rgb(153,119,58),true);
         sourceLabel.setPadding(0,0,0,dp(13));page.addView(sourceLabel);
         TextView title=label(article.title,29,Color.rgb(39,38,34),true);title.setLineSpacing(dp(4),1.04f);page.addView(title);
         String author=article.author==null||article.author.trim().isEmpty()?"":article.author+"  ·  ";
@@ -94,6 +101,15 @@ public class ReaderArticleActivity extends AppCompatActivity {
 
     private TextView bottomAction(String value){TextView t=label(value,15,Color.rgb(83,77,66),true);t.setGravity(android.view.Gravity.CENTER);t.setBackground(roundBg());LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(44),dp(40));p.rightMargin=dp(7);t.setLayoutParams(p);return t;}
     private android.graphics.drawable.GradientDrawable roundBg(){android.graphics.drawable.GradientDrawable d=new android.graphics.drawable.GradientDrawable();d.setColor(Color.rgb(247,243,234));d.setCornerRadius(dp(13));return d;}
+    private String sourceDisplayName(){
+        if(sourceInfo==null)return "MINENOTE READER";
+        String title=sourceInfo.title==null?"":sourceInfo.title.trim();
+        if(title.isEmpty()||title.matches("(?i)^https?://.*")){
+            try{String host=new java.net.URI(sourceInfo.url).getHost();if(host!=null)return host.replaceFirst("(?i)^www\\.","");}
+            catch(Exception ignored){}
+        }
+        return title;
+    }
     private String dateLabel(long time){if(time<=0)return "";return new java.text.SimpleDateFormat("yyyy年M月d日",java.util.Locale.CHINA).format(new java.util.Date(time));}
 
     private void showNotePicker(){
