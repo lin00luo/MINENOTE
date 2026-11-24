@@ -31,7 +31,7 @@ public final class ReaderFetcher {
     public static String discoverFeed(String websiteUrl) throws Exception {
         String url = normalizeHttpUrl(websiteUrl);
         Document doc = Jsoup.connect(url).userAgent("MinenoteReader/1.0")
-                .timeout(12000).followRedirects(true).parser(Parser.xmlParser()).get();
+                .timeout(12000).followRedirects(true).get();
         Elements links = doc.select("link[rel~=(?i)alternate][type]");
         for (Element link : links) {
             String type = link.attr("type").toLowerCase();
